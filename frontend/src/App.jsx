@@ -11,6 +11,7 @@ import Community from './pages/Community';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
 
+
 function PrivateRoute({ children, adminOnly }) {
   const { user, isAdmin } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
