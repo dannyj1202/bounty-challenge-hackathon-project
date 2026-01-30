@@ -1,8 +1,27 @@
+# =========================
+# Node / JS
+# =========================
 node_modules/
+dist/
+build/
+
+# =========================
+# Environment files
+# =========================
 .env
 .env.local
 .env.production
-dist/
-build/
-.DS_Store
+backend/.env
+
+# =========================
+# Database (SQLite)
+# =========================
 backend/data/
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store

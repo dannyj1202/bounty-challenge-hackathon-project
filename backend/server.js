@@ -52,3 +52,9 @@ app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOSt
 app.listen(PORT, () => {
   console.log(`Smart Study Copilot API running at http://localhost:${PORT}`);
 });
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Server error', message: err.message });
+});
+
