@@ -1,0 +1,72 @@
+:root {
+  --bg: #f5f6f8;
+  --surface: #fff;
+  --border: #e2e4e8;
+  --primary: #0078d4;
+  --primary-hover: #106ebe;
+  --text: #323130;
+  --text-muted: #605e5c;
+  --success: #107c10;
+  --error: #d13438;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { cursor: pointer; font: inherit; }
+input, select, textarea { font: inherit; }
+
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+.app-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; }
+.app-header h1 { margin: 0; font-size: 1.25rem; }
+.app-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.app-nav a { padding: 6px 12px; border-radius: var(--radius); color: var(--text); }
+.app-nav a:hover { background: var(--bg); }
+.app-nav a.active { background: var(--primary); color: #fff; }
+.main { flex: 1; padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+.card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: var(--radius); border: none; background: var(--primary); color: #fff; }
+.btn:hover { background: var(--primary-hover); }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-secondary:hover { background: #d0d2d6; }
+.loading { color: var(--text-muted); }
+.error { color: var(--error); }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 4px; font-weight: 500; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 480px; width: 90%; max-height: 90vh; overflow: auto; }
+.modal h3 { margin-top: 0; }
+.modal-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+.grid-3 { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr; } }
+
+.widget-list { list-style: none; padding: 0; margin: 0; }
+.widget-list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.widget-list li:last-child { border-bottom: none; }
+
+.copilot-message { padding: 10px 12px; border-radius: var(--radius); margin-bottom: 8px; }
+.copilot-message.user { background: #e8f4fc; margin-left: 24px; }
+.copilot-message.assistant { background: var(--surface); border: 1px solid var(--border); }
+.copilot-message .confidence { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+
+.task-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.task-item:last-child { border-bottom: none; }
+.task-item input[type="checkbox"] { width: 18px; height: 18px; }
+.task-item.done { opacity: 0.7; }
+.task-item.done .task-title { text-decoration: line-through; }
+
+.event-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.event-item:last-child { border-bottom: none; }
+
+.quiz-option { display: block; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
+.quiz-option:hover { border-color: var(--primary); }
+.quiz-option.selected { border-color: var(--primary); background: #e8f4fc; }
+
+.language-select { min-width: 160px; }
