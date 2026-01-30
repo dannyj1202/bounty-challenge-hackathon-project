@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '.env') });
+
 import express from 'express';
 import cors from 'cors';
 import { getDb, initDb } from './db/index.js';
@@ -18,6 +19,7 @@ import notificationsRoutes from './routes/notifications.js';
 import insightsRoutes from './routes/insights.js';
 import webhooksRoutes from './routes/webhooks.js';
 import devRoutes from './routes/dev.js';
+import communityRoutes from './routes/community.js'; // ✅ add this
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +34,9 @@ try {
 } catch (e) {
   console.warn('DB init:', e.message);
 }
+
+// ✅ add this (public route)
+app.use('/api/community', communityRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -57,4 +62,3 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Server error', message: err.message });
 });
-
