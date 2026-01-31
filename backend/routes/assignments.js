@@ -12,30 +12,40 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
-// POST /api/assignments
+// POST /api/assignments — title, dueDate, difficulty (easy|medium|hard), notes (important info)
 router.post('/', (req, res) => {
-  const { userId, title, dueDate } = req.body || {};
+  const { userId, title, dueDate, difficulty, notes } = req.body || {};
   if (!userId || !title) return res.status(400).json({ error: 'userId and title required' });
   const id = 'a-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
   const db = getDb();
+  const comment = notes != null ? String(notes) : null;
+  const diff = difficulty && ['easy', 'medium', 'hard'].includes(String(difficulty).toLowerCase()) ? String(difficulty).toLowerCase() : null;
   db.prepare(
-    'INSERT INTO assignments (id, userId, title, dueDate) VALUES (?, ?, ?, ?)'
-  ).run(id, userId, title, dueDate || null);
+    'INSERT INTO assignments (id, userId, title, dueDate, difficulty, comment) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, userId, title, dueDate || null, diff, comment);
+  const taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+  db.prepare(
+    'INSERT INTO tasks (id, userId, title, dueDate, source, createdAt, completed) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), 0)'
+  ).run(taskId, userId, 'Work on ' + title, dueDate || null, 'assignment:' + id);
   const row = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
   res.status(201).json(row);
 });
 
-// PUT /api/assignments/:id
+// PUT /api/assignments/:id — title, dueDate, difficulty, notes
 router.put('/:id', (req, res) => {
   const { id } = req.params;
-  const { title, dueDate } = req.body || {};
+  const { title, dueDate, difficulty, notes } = req.body || {};
   const db = getDb();
   const existing = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Assignment not found' });
-  if (title != null) existing.title = title;
-  if (dueDate !== undefined) existing.dueDate = dueDate;
-  db.prepare('UPDATE assignments SET title = ?, dueDate = ?, completed = ?, completedAt = ? WHERE id = ?').run(
-    existing.title, existing.dueDate, existing.completed, existing.completedAt, id
+  const newTitle = title != null ? title : existing.title;
+  const newDueDate = dueDate !== undefined ? dueDate : existing.dueDate;
+  const newDifficulty = difficulty !== undefined
+    ? (['easy', 'medium', 'hard'].includes(String(difficulty).toLowerCase()) ? String(difficulty).toLowerCase() : existing.difficulty)
+    : existing.difficulty;
+  const newComment = notes !== undefined ? String(notes) : existing.comment;
+  db.prepare('UPDATE assignments SET title = ?, dueDate = ?, difficulty = ?, comment = ? WHERE id = ?').run(
+    newTitle, newDueDate, newDifficulty, newComment, id
   );
   res.json(db.prepare('SELECT * FROM assignments WHERE id = ?').get(id));
 });

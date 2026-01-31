@@ -22,6 +22,8 @@ import communityRoutes from './routes/community.js';
 import calendarRoutes from './routes/calendar.js';
 import docsRoutes from './routes/docs.js';
 import documentsRoutes from './routes/documents.js';
+import tasksRoutes from './routes/tasks.js';
+import onenoteRoutes from "./routes/onenote.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -66,6 +68,8 @@ app.use('/api/dev', devRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/documents', documentsRoutes);
+app.use('/api/tasks', tasksRoutes);
+app.use("/api/onenote", onenoteRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

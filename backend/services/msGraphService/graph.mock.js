@@ -8,8 +8,8 @@ export async function getCalendarEvents({ userId, start, end }) {
   ];
 }
 
-export async function createCalendarEvent({ userId, subject, start, end, body }) {
-  return { id: 'mock-new-' + Date.now(), subject, start: { dateTime: start }, end: { dateTime: end } };
+export async function createCalendarEvent({ userId, subject, start, end, body, isAllDay }) {
+  return { id: 'mock-new-' + Date.now(), subject, start: { dateTime: start, date: start }, end: { dateTime: end, date: end }, isAllDay: !!isAllDay };
 }
 
 export async function createOneNotePage({ userId, title, content }) {

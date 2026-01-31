@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
-import { getStoredAccessToken, createCalendarEvent } from '../services/msGraphService/index.js';
+import { getStoredAccessToken, createCalendarEvent, deleteCalendarEvent } from '../services/msGraphService/index.js';
 
 const router = Router();
 const USE_MS_GRAPH = process.env.USE_MS_GRAPH === 'true';
@@ -60,11 +60,27 @@ router.post('/', async (req, res) => {
   res.status(201).json(row);
 });
 
-// DELETE /api/events/:id
-router.delete('/:id', (req, res) => {
+// DELETE /api/events/:id — delete locally; if event is from Outlook (id ms:outlook:xxx), also delete from Outlook so sync won't bring it back
+router.delete('/:id', async (req, res) => {
   const db = getDb();
-  const r = db.prepare('DELETE FROM events WHERE id = ?').run(req.params.id);
-  if (r.changes === 0) return res.status(404).json({ error: 'Event not found' });
+  const id = req.params.id;
+  const row = db.prepare('SELECT id, userId FROM events WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Event not found' });
+
+  const outlookPrefix = 'ms:outlook:';
+  if (id.startsWith(outlookPrefix) && USE_MS_GRAPH) {
+    const graphEventId = id.slice(outlookPrefix.length);
+    const accessToken = getStoredAccessToken(row.userId);
+    if (accessToken) {
+      try {
+        await deleteCalendarEvent(accessToken, graphEventId);
+      } catch (e) {
+        console.warn('[events] Outlook delete failed (event may already be gone):', e.message);
+      }
+    }
+  }
+
+  db.prepare('DELETE FROM events WHERE id = ?').run(id);
   res.status(204).send();
 });
 

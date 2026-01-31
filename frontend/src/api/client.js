@@ -55,6 +55,12 @@ export const assignments = {
   delete: (id) => api('DELETE', `/assignments/${id}`),
   complete: (id, body) => api('POST', `/assignments/${id}/complete`, body),
 };
+export const tasks = {
+  list: (userId) => api('GET', `/tasks?userId=${encodeURIComponent(userId)}`),
+  create: (body) => api('POST', '/tasks', body),
+  delete: (id) => api('DELETE', `/tasks/${id}`),
+  complete: (id) => api('PATCH', `/tasks/${id}/complete`),
+};
 export const events = {
   list: (userId, start, end) => {
     let path = `/events?userId=${encodeURIComponent(userId)}`;
@@ -65,8 +71,15 @@ export const events = {
   create: (body) => api('POST', '/events', body),
   delete: (id) => api('DELETE', `/events/${id}`),
 };
+/** Calendar: sync from Outlook (pull events into app). When Microsoft is connected, events you add here also sync to Outlook. */
+export const calendar = {
+  sync: (userId, start, end) => api('POST', '/calendar/sync', { userId, start, end }),
+  /** Create assignment deadlines as all-day events in Outlook. */
+  syncAssignmentDeadlines: (userId) => api('POST', '/calendar/sync-assignment-deadlines', { userId }),
+};
 export const plan = {
-  generate: (userId) => api('POST', '/plan/generate', { userId }),
+  /** spread: 'light' | 'balanced' | 'intensive' (blocks per week: 2, 4, 6) */
+  generate: (userId, spread) => api('POST', '/plan/generate', { userId, spread }),
 };
 export const copilot = {
   chat: (body) => api('POST', '/copilot/chat', body),

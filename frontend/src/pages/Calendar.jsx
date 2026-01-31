@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { events, plan, assignments } from '../api/client';
+import { events, plan, assignments, copilot, calendar } from '../api/client';
 
 // ✅ FullCalendar
 import FullCalendar from '@fullcalendar/react';
@@ -8,8 +8,6 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 
-// Use relative /api so Vite proxy works; set VITE_API_BASE only if backend is on another origin.
-const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export default function Calendar() {
   const { userId } = useAuth();
@@ -20,19 +18,20 @@ export default function Calendar() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [scheduleResult, setScheduleResult] = useState(null);
+  const [spread, setSpread] = useState('balanced');
 
   const [newTitle, setNewTitle] = useState('');
   const [newStart, setNewStart] = useState('');
   const [newEnd, setNewEnd] = useState('');
   const [syncNote, setSyncNote] = useState('');
 
-  // Load existing events + assignments from your current API
+  const start = new Date().toISOString().slice(0, 10);
+  const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   const load = () => {
     if (!userId) return;
-
-    const start = new Date().toISOString().slice(0, 10);
-    const end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
+    const rangeStart = new Date().toISOString();
+    const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
     Promise.all([
       events.list(userId, start, end),
       assignments.list(userId),
@@ -44,56 +43,51 @@ export default function Calendar() {
       .catch(() => {});
   };
 
-  useEffect(load, [userId]);
+  // Auto-sync from Outlook when Calendar loads so the view stays in sync with your real Outlook calendar
+  useEffect(() => {
+    if (!userId) return;
+    setSyncing(true);
+    const rangeStart = new Date().toISOString();
+    const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    calendar.sync(userId, rangeStart, rangeEnd)
+      .then(() => { load(); setSyncNote('Calendar synced with Outlook.'); })
+      .catch(() => { load(); setSyncNote(''); })
+      .finally(() => setSyncing(false));
+  }, [userId]);
 
-  // ✅ Sync Outlook -> backend /api/calendar/sync (mock today, real when token exists)
   const syncOutlook = async () => {
     if (!userId) return;
     setSyncing(true);
     setError('');
     setSyncNote('');
-
     try {
-      const now = new Date();
-      const startISO = now.toISOString();
-      const endISO = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      // IMPORTANT:
-      // When your friend finishes Entra ID, you will add:
-      // Authorization: `Bearer ${accessToken}`
-      const res = await fetch(`${API_BASE}/api/calendar/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, start: startISO, end: endISO })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to sync Outlook');
-
-      // Backend returns { id, title, startAt, endAt, type, sourceId } (already normalized)
-      const incoming = (data.events || []).map((e) => ({
-        id: e.id || `outlook-${Math.random()}`,
-        title: e.title || e.subject || 'Outlook event',
-        startAt: e.startAt || e.start?.dateTime || e.startTime,
-        endAt: e.endAt || e.end?.dateTime || e.endTime,
-        type: e.type || 'academic',
-        sourceId: e.sourceId || 'outlook',
-      }));
-
-      // Refetch from API so calendar shows DB state (includes upserted Outlook events)
+      const rangeStart = new Date().toISOString();
+      const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const data = await calendar.sync(userId, rangeStart, rangeEnd);
       load();
-
       setSyncNote(
         data.source === 'outlook'
-          ? (incoming.length === 0
-              ? '✅ Synced 0 Outlook events (none in the next 30 days).'
-              : `✅ Synced ${incoming.length} Outlook events.`)
-          : `✅ Loaded ${incoming.length} mock events.`
+          ? (data.events?.length === 0
+              ? 'Synced with Outlook (no events in range).'
+              : `Synced ${data.events?.length ?? 0} events from Outlook.`)
+          : `Loaded ${data.events?.length ?? 0} mock events.`
       );
     } catch (err) {
       setError(err.message);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const syncAssignmentDeadlinesToOutlook = async () => {
+    if (!userId) return;
+    setError('');
+    try {
+      const data = await calendar.syncAssignmentDeadlines(userId);
+      setSyncNote(`Added ${data.created ?? 0} assignment deadline(s) to your Outlook calendar.`);
+      load();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -121,14 +115,14 @@ export default function Calendar() {
     }
   };
 
-  // Generate study schedule (existing)
+  // Generate study schedule — uses /plan command (no Azure). Spread: light / balanced / intensive.
   const generateSchedule = async () => {
     setLoading(true);
     setError('');
     setScheduleResult(null);
     try {
-      const result = await plan.generate(userId);
-      setScheduleResult(result);
+      const result = await plan.generate(userId, spread);
+      setScheduleResult({ ...result, suggestions: result.suggestions || [] });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -136,26 +130,31 @@ export default function Calendar() {
     }
   };
 
-  // Accept study block => create an event (existing events.create)
-  const acceptBlock = async (block) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const startAt = `${today}T${block.start}:00`;
-    const endAt = `${today}T${block.end}:00`;
-
+  // Accept a study block suggestion → creates event (and Outlook if connected) via copilot accept
+  const acceptBlockSuggestion = async (suggestionId) => {
     setError('');
     try {
-      const created = await events.create({
-        userId,
-        title: block.title || 'Study block',
-        startAt,
-        endAt,
-        type: 'personal',
-        sourceId: 'plan'
-      });
-
-      setEventList((prev) => [...prev, created]);
+      await copilot.acceptSuggestion(suggestionId, userId);
       setScheduleResult((prev) =>
-        prev ? { ...prev, blocks: prev.blocks.filter((b) => b !== block) } : null
+        prev?.suggestions
+          ? { ...prev, suggestions: prev.suggestions.filter((s) => s.id !== suggestionId) }
+          : prev
+      );
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Reject a study block suggestion
+  const rejectBlockSuggestion = async (suggestionId) => {
+    setError('');
+    try {
+      await copilot.rejectSuggestion(suggestionId, userId);
+      setScheduleResult((prev) =>
+        prev?.suggestions
+          ? { ...prev, suggestions: prev.suggestions.filter((s) => s.id !== suggestionId) }
+          : prev
       );
     } catch (err) {
       setError(err.message);
@@ -172,22 +171,38 @@ export default function Calendar() {
     }
   };
 
-  // ✅ Convert your eventList => FullCalendar events
+  // ✅ Convert eventList + assignment deadlines => FullCalendar events
   const calendarEvents = useMemo(() => {
-    return eventList
-      .filter(e => e.startAt && e.endAt)
+    const fromEvents = eventList
+      .filter((e) => e.startAt && e.endAt)
       .map((e) => ({
         id: String(e.id),
         title: e.title || '(No title)',
         start: e.startAt,
         end: e.endAt,
-        extendedProps: { raw: e }
+        extendedProps: { raw: e, kind: 'event' },
       }));
-  }, [eventList]);
+    const fromAssignments = (assignmentsList || [])
+      .filter((a) => a.dueDate)
+      .map((a) => ({
+        id: `assignment:${a.id}`,
+        title: `Due: ${a.title}`,
+        start: a.dueDate,
+        allDay: true,
+        className: 'fc-event-assignment',
+        extendedProps: { raw: a, kind: 'assignment' },
+      }));
+    return [...fromEvents, ...fromAssignments];
+  }, [eventList, assignmentsList]);
 
-  // Click on calendar event => delete
+  // Click on calendar event => delete (only real events; assignment deadlines are read-only)
   const onEventClick = async (clickInfo) => {
+    const kind = clickInfo.event.extendedProps?.kind;
     const raw = clickInfo.event.extendedProps?.raw;
+    if (kind === 'assignment') {
+      // Assignment deadline: just show info (or could link to assignment)
+      return;
+    }
     if (!raw?.id) return;
 
     const ok = window.confirm(`Delete "${clickInfo.event.title}"?`);
@@ -202,12 +217,12 @@ export default function Calendar() {
 
       {/* Outlook Sync */}
       <div className="card">
-        <h3>Outlook Calendar</h3>
+        <h3>Outlook Calendar (Microsoft Graph)</h3>
         <p style={{ color: 'var(--text-muted)' }}>
-          Sync commitments from your Microsoft Outlook Calendar.
+          When you connect Microsoft in Settings, events sync both ways: Outlook events appear here on load, and events you add here (including accepted study blocks) are created in your real Outlook calendar.
         </p>
         <button type="button" className="btn" onClick={syncOutlook} disabled={syncing || !userId}>
-          {syncing ? 'Syncing…' : 'Sync Outlook Calendar'}
+          {syncing ? 'Syncing…' : 'Sync from Outlook now'}
         </button>
         {syncNote && <p style={{ marginTop: 10, color: 'var(--text-muted)' }}>{syncNote}</p>}
       </div>
@@ -262,6 +277,14 @@ export default function Calendar() {
       {/* Assignment due dates */}
       <div className="card">
         <h3>Assignment due dates</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: 8 }}>
+          Shown on the calendar above. With Microsoft connected, you can add them to Outlook too.
+        </p>
+        {assignmentsList.length > 0 && (
+          <button type="button" className="btn btn-secondary" style={{ marginBottom: 12 }} onClick={syncAssignmentDeadlinesToOutlook}>
+            Add assignment deadlines to Outlook
+          </button>
+        )}
         <ul className="widget-list">
           {assignmentsList.length === 0 && <li>No upcoming assignments</li>}
           {assignmentsList.map((a) => (
@@ -272,26 +295,68 @@ export default function Calendar() {
 
       {/* Study schedule */}
       <div className="card">
+        <p style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
+          Study blocks are spread from today until your furthest assignment due date. Choose how many blocks per week:
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+          {[
+            { value: 'light', label: 'Light (2/week)', desc: 'Fewer blocks, spread out' },
+            { value: 'balanced', label: 'Balanced (4/week)', desc: 'Steady pace' },
+            { value: 'intensive', label: 'Intensive (6/week)', desc: 'More blocks per week' },
+          ].map((opt) => (
+            <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="spread"
+                value={opt.value}
+                checked={spread === opt.value}
+                onChange={() => setSpread(opt.value)}
+              />
+              <span><strong>{opt.label}</strong> — {opt.desc}</span>
+            </label>
+          ))}
+        </div>
         <button type="button" className="btn" onClick={generateSchedule} disabled={loading}>
           {loading ? 'Generating…' : 'Generate study schedule around my calendar'}
         </button>
 
         {error && <p className="error">{error}</p>}
 
-        {scheduleResult && scheduleResult.blocks && (
+        {scheduleResult && (scheduleResult.suggestions?.length > 0 || scheduleResult.blocks?.length > 0) && (
           <div style={{ marginTop: 16 }}>
-            <p><strong>Suggested study blocks</strong> — Accept to create events.</p>
-            {scheduleResult.explanation && <p style={{ color: 'var(--text-muted)' }}>{scheduleResult.explanation}</p>}
-            <ul className="widget-list">
-              {scheduleResult.blocks.map((block, i) => (
-                <li key={i}>
-                  {block.start}–{block.end}: {block.title} {block.suggestedTopic && `(${block.suggestedTopic})`}
-                  <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => acceptBlock(block)}>
-                    Accept
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <p><strong>Suggested study blocks</strong> — Accept to add to your calendar (and Outlook if connected).</p>
+            {scheduleResult.reply && <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{scheduleResult.reply}</p>}
+            {scheduleResult.suggestions && scheduleResult.suggestions.length > 0 ? (
+              <ul className="widget-list" style={{ listStyle: 'none', paddingLeft: 0 }}>
+                {scheduleResult.suggestions.map((s) => {
+                  let payload = {};
+                  try {
+                    payload = typeof s.payload === 'string' ? JSON.parse(s.payload) : s.payload || {};
+                  } catch {}
+                  const start = payload.start || payload.startAt || '';
+                  const end = payload.end || payload.endAt || '';
+                  const title = payload.title || s.label || 'Study block';
+                  return (
+                    <li key={s.id} style={{ marginBottom: 12, padding: 12, background: 'var(--bg-muted)', borderRadius: 8 }}>
+                      <strong>{title}</strong>
+                      {start && end && <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>{String(start).slice(0, 16)} – {String(end).slice(11, 16)}</span>}
+                      <div style={{ marginTop: 8 }}>
+                        <button type="button" className="btn btn-secondary" style={{ marginRight: 8 }} onClick={() => rejectBlockSuggestion(s.id)}>Reject</button>
+                        <button type="button" className="btn" onClick={() => acceptBlockSuggestion(s.id)}>Accept</button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <ul className="widget-list">
+                {scheduleResult.blocks?.map((block, i) => (
+                  <li key={i}>
+                    {block.start}–{block.end}: {block.title}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

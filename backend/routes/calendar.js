@@ -196,4 +196,51 @@ router.post("/outlook/create", async (req, res) => {
   }
 });
 
+/* -----------------------------
+   POST /api/calendar/sync-assignment-deadlines
+   Body: { userId }
+   Creates all-day events in Outlook for each assignment due date (when Microsoft connected).
+------------------------------ */
+router.post("/sync-assignment-deadlines", async (req, res) => {
+  const { userId } = req.body || {};
+  if (!userId) return res.status(400).json({ error: "userId required" });
+
+  const db = getDb();
+  const useGraph = process.env.USE_MS_GRAPH === "true";
+  const accessToken = useGraph ? getStoredAccessToken(userId) : null;
+  if (!accessToken) {
+    return res.status(401).json({
+      error: "Microsoft account not connected. Connect in Settings to sync assignment deadlines to Outlook.",
+    });
+  }
+
+  const rows = db.prepare(
+    `SELECT id, title, dueDate FROM assignments
+     WHERE userId = ? AND completed = 0 AND dueDate IS NOT NULL AND dueDate >= date('now')
+     ORDER BY dueDate ASC`
+  ).all(userId);
+
+  const created = [];
+  for (const a of rows) {
+    try {
+      const subject = "Due: " + (a.title || "Assignment");
+      const start = a.dueDate.length >= 10 ? a.dueDate.slice(0, 10) : a.dueDate;
+      const result = await createCalendarEvent({
+        userId,
+        subject,
+        start,
+        end: start,
+        body: null,
+        accessToken,
+        isAllDay: true,
+      });
+      if (result?.id) created.push({ assignmentId: a.id, title: a.title, dueDate: a.dueDate, outlookId: result.id });
+    } catch (e) {
+      console.warn("[calendar/sync-assignment-deadlines] failed for", a.id, e.message);
+    }
+  }
+
+  res.json({ ok: true, created: created.length, events: created });
+});
+
 export default router;

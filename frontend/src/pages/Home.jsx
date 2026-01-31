@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../context/PlanContext';
-import { assignments, copilot, notifications, user, docs } from '../api/client';
+import { assignments, copilot, notifications, user, docs, tasks as tasksApi } from '../api/client';
 
 const WIDGET_IDS = ['notifications', 'tasks', 'copilot'];
 const COMMAND_CHIPS = ['/help', '/plan', '/summarize', '/flashcards', '/quiz', '/notes', '/check', '/tasks', '/deadline', '/reschedule'];
@@ -11,8 +11,14 @@ export default function Home() {
   const { userId } = useAuth();
   const { canUseCopilot, copilotRemaining, copilotLimit, incrementCopilotUsage, plan } = usePlan();
   const [widgets, setWidgets] = useState(WIDGET_IDS);
-  const [tasks, setTasks] = useState([]);
+  const [assignmentsList, setAssignmentsList] = useState([]);
+  const [taskList, setTaskList] = useState([]);
   const [notifs, setNotifs] = useState([]);
+  const [assignmentModal, setAssignmentModal] = useState(false);
+  const [newAssignment, setNewAssignment] = useState({ title: '', dueDate: '', difficulty: 'medium', notes: '' });
+  const [taskModal, setTaskModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDue, setNewTaskDue] = useState('');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,10 +33,12 @@ export default function Home() {
     if (!userId) return;
     Promise.all([
       assignments.list(userId),
+      tasksApi.list(userId),
       notifications.list(userId),
       user.getPreferences(userId).catch(() => ({ widgets: '[]' })),
-    ]).then(([t, n, prefs]) => {
-      setTasks(t);
+    ]).then(([a, t, n, prefs]) => {
+      setAssignmentsList(a);
+      setTaskList(t);
       setNotifs(n);
       try {
         const w = JSON.parse(prefs.widgets || '[]');
@@ -154,7 +162,7 @@ export default function Home() {
         )
       );
       const list = await assignments.list(userId);
-      setTasks(list);
+      setAssignmentsList(list);
     } catch (err) {
       setError(err.message);
     }
@@ -177,13 +185,58 @@ export default function Home() {
     }
   };
 
-  const addTask = async () => {
-    const title = window.prompt('Assignment title');
-    if (!title) return;
+  const addAssignment = async (e) => {
+    e?.preventDefault();
+    if (!newAssignment.title?.trim()) return;
     setError('');
     try {
-      const created = await assignments.create({ userId, title });
-      setTasks((t) => [created, ...t]);
+      const created = await assignments.create({
+        userId,
+        title: newAssignment.title.trim(),
+        dueDate: newAssignment.dueDate || null,
+        difficulty: newAssignment.difficulty || null,
+        notes: newAssignment.notes?.trim() || null,
+      });
+      setAssignmentsList((prev) => [created, ...prev]);
+      setNewAssignment({ title: '', dueDate: '', difficulty: 'medium', notes: '' });
+      setAssignmentModal(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const addPersonalTask = async (e) => {
+    e?.preventDefault();
+    if (!newTaskTitle?.trim()) return;
+    setError('');
+    try {
+      const created = await tasksApi.create({
+        userId,
+        title: newTaskTitle.trim(),
+        dueDate: newTaskDue || null,
+      });
+      setTaskList((prev) => [created, ...prev]);
+      setNewTaskTitle('');
+      setNewTaskDue('');
+      setTaskModal(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const completeTaskItem = async (id) => {
+    try {
+      await tasksApi.complete(id);
+      setTaskList((prev) => prev.map((t) => (t.id === id ? { ...t, completed: 1 } : t)));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const deleteTaskItem = async (id) => {
+    try {
+      await tasksApi.delete(id);
+      setTaskList((prev) => prev.filter((t) => t.id !== id));
     } catch (err) {
       setError(err.message);
     }
@@ -193,7 +246,7 @@ export default function Home() {
     setError('');
     try {
       await assignments.complete(id, { difficulty, comment });
-      setTasks((t) => t.map((x) => (x.id === id ? { ...x, completed: 1, completedAt: new Date().toISOString() } : x)));
+      setAssignmentsList((t) => t.map((x) => (x.id === id ? { ...x, completed: 1, completedAt: new Date().toISOString() } : x)));
       setCompleteModal(null);
     } catch (err) {
       setError(err.message);
@@ -218,19 +271,39 @@ export default function Home() {
           </div>
         )}
         {leftWidgets.includes('tasks') && (
-          <div className="card">
-            <h3>Assignments</h3>
-            <button type="button" className="btn" onClick={addTask}>Add</button>
-            <ul className="widget-list" style={{ marginTop: 12 }}>
-              {tasks.slice(0, 8).map((t) => (
-                <li key={t.id} className={`task-item ${t.completed ? 'done' : ''}`}>
-                  <input type="checkbox" checked={!!t.completed} onChange={() => !t.completed && setCompleteModal(t)} />
-                  <span className="task-title">{t.title}</span>
-                  {t.dueDate && <small>{t.dueDate}</small>}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <>
+            <div className="card">
+              <h3>Assignments</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deadline, difficulty, and notes are used when generating your study schedule.</p>
+              <button type="button" className="btn" onClick={() => setAssignmentModal(true)}>Add assignment</button>
+              <ul className="widget-list" style={{ marginTop: 12 }}>
+                {assignmentsList.filter((a) => !a.completed).slice(0, 8).map((a) => (
+                  <li key={a.id} className={`task-item ${a.completed ? 'done' : ''}`}>
+                    <input type="checkbox" checked={!!a.completed} onChange={() => !a.completed && setCompleteModal(a)} />
+                    <span className="task-title">{a.title}</span>
+                    {a.dueDate && <small>Due {a.dueDate}</small>}
+                    {a.difficulty && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>({a.difficulty})</span>}
+                    {a.comment && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.comment.slice(0, 60)}{a.comment.length > 60 ? '…' : ''}</div>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="card" style={{ marginTop: 12 }}>
+              <h3>Tasks</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Personal tasks and auto-created “Work on…” from assignments.</p>
+              <button type="button" className="btn btn-secondary" onClick={() => setTaskModal(true)}>Add personal task</button>
+              <ul className="widget-list" style={{ marginTop: 12 }}>
+                {taskList.filter((t) => !t.completed).slice(0, 10).map((t) => (
+                  <li key={t.id} className={`task-item ${t.completed ? 'done' : ''}`}>
+                    <input type="checkbox" checked={!!t.completed} onChange={() => !t.completed && completeTaskItem(t.id)} />
+                    <span className="task-title">{t.title}</span>
+                    {t.dueDate && <small>Due {t.dueDate}</small>}
+                    <button type="button" className="btn btn-secondary" style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }} onClick={() => deleteTaskItem(t.id)}>Delete</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
         )}
       </div>
       <div>
@@ -354,19 +427,67 @@ export default function Home() {
       </div>
       <div>
         <div className="card">
-          <h3>Tasks</h3>
-          <button type="button" className="btn btn-secondary" onClick={addTask}>Add assignment</button>
-          <ul className="widget-list" style={{ marginTop: 12 }}>
-            {tasks.map((t) => (
-              <li key={t.id} className={`task-item ${t.completed ? 'done' : ''}`}>
-                <input type="checkbox" checked={!!t.completed} onChange={() => !t.completed && setCompleteModal(t)} />
-                <span className="task-title">{t.title}</span>
-                {t.dueDate && <small>{t.dueDate}</small>}
-              </li>
-            ))}
-          </ul>
+          <h3>Upcoming</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Assignments and tasks with due dates feed into your study schedule.</p>
+          <Link to="/calendar" className="btn">Calendar &amp; generate study schedule</Link>
         </div>
       </div>
+
+      {assignmentModal && (
+        <div className="modal-overlay" onClick={() => setAssignmentModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Add assignment</h3>
+            <form onSubmit={addAssignment}>
+              <div className="form-group">
+                <label>Title</label>
+                <input type="text" value={newAssignment.title} onChange={(e) => setNewAssignment((a) => ({ ...a, title: e.target.value }))} placeholder="e.g. Math homework ch.3" required />
+              </div>
+              <div className="form-group">
+                <label>Deadline (optional)</label>
+                <input type="date" value={newAssignment.dueDate} onChange={(e) => setNewAssignment((a) => ({ ...a, dueDate: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label>Difficulty</label>
+                <select value={newAssignment.difficulty} onChange={(e) => setNewAssignment((a) => ({ ...a, difficulty: e.target.value }))}>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Notes / important info (optional)</label>
+                <textarea value={newAssignment.notes} onChange={(e) => setNewAssignment((a) => ({ ...a, notes: e.target.value }))} placeholder="e.g. Focus on problem set 2" rows={2} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setAssignmentModal(false)}>Cancel</button>
+                <button type="submit" className="btn">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {taskModal && (
+        <div className="modal-overlay" onClick={() => setTaskModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Add personal task</h3>
+            <form onSubmit={addPersonalTask}>
+              <div className="form-group">
+                <label>Title</label>
+                <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="e.g. Review notes" required />
+              </div>
+              <div className="form-group">
+                <label>Due date (optional)</label>
+                <input type="date" value={newTaskDue} onChange={(e) => setNewTaskDue(e.target.value)} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setTaskModal(false)}>Cancel</button>
+                <button type="submit" className="btn">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {completeModal && (
         <div className="modal-overlay" onClick={() => setCompleteModal(null)}>

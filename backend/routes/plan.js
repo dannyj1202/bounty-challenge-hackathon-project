@@ -1,21 +1,34 @@
 import { Router } from 'express';
-import { getDb } from '../db/index.js';
-import * as copilot from '../services/copilotService/index.js';
+import { run as runPlanCommand } from '../services/commands/plan.js';
 
 const router = Router();
 
-// POST /api/plan/generate { userId } -> suggested study blocks
+// POST /api/plan/generate { userId, spread?: 'light'|'balanced'|'intensive' } -> reply, suggestions. No Azure required.
+// spread: light=2 blocks/week, balanced=4, intensive=6; planning window = until furthest assignment due (cap 12 weeks).
 router.post('/generate', async (req, res) => {
-  const { userId } = req.body || {};
+  const { userId, spread } = req.body || {};
   if (!userId) return res.status(400).json({ error: 'userId required' });
-  const db = getDb();
-  const assignments = db.prepare('SELECT * FROM assignments WHERE userId = ? AND completed = 0').all(userId);
-  const today = new Date().toISOString().slice(0, 10);
-  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const events = db.prepare('SELECT * FROM events WHERE userId = ? AND startAt >= ? AND endAt <= ? ORDER BY startAt').all(userId, today, nextWeek);
+  const validSpread = ['light', 'balanced', 'intensive'].includes(spread) ? spread : undefined;
   try {
-    const result = await copilot.generateStudyPlan({ userId, assignments, events });
-    res.json(result);
+    const result = await runPlanCommand({
+      userId,
+      messages: [{ role: 'user', content: '/plan' }],
+      context: validSpread ? { spread: validSpread } : {},
+      args: '',
+    });
+    const blocks = (result.structured?.blocks || []).map((b) => ({
+      ...b,
+      start: b.start ? String(b.start).slice(11, 16) : '',
+      end: b.end ? String(b.end).slice(11, 16) : '',
+    }));
+    res.json({
+      reply: result.reply,
+      blocks,
+      suggestions: result.suggestions || [],
+      explanation: result.reply,
+      spread: result.structured?.spread,
+      planningDays: result.structured?.planningDays,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -1,122 +1,289 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { notes as notesApi } from '../api/client';
 
-const LANGUAGES = [
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'zh', name: 'Chinese' },
-];
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export default function Notes() {
   const { userId } = useAuth();
+
+  // Your existing note UI state (keep minimal)
   const [text, setText] = useState('');
-  const [language, setLanguage] = useState('es');
-  const [result, setResult] = useState(null);
+
+  // OneNote explorer state
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [oneNoteTitle, setOneNoteTitle] = useState('');
+  const [err, setErr] = useState('');
 
-  const run = async (fn, ...args) => {
+  const [notebooks, setNotebooks] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [pages, setPages] = useState([]);
+
+  const [selectedNotebookId, setSelectedNotebookId] = useState(null);
+  const [selectedSectionId, setSelectedSectionId] = useState(null);
+
+  const selectedNotebook = useMemo(
+    () => notebooks.find(n => n.id === selectedNotebookId) || null,
+    [notebooks, selectedNotebookId]
+  );
+  const selectedSection = useMemo(
+    () => sections.find(s => s.id === selectedSectionId) || null,
+    [sections, selectedSectionId]
+  );
+
+  const loadNotebooks = async () => {
+    if (!userId) return;
     setLoading(true);
-    setError('');
-    setResult(null);
+    setErr('');
+    setNotebooks([]);
+    setSections([]);
+    setPages([]);
+    setSelectedNotebookId(null);
+    setSelectedSectionId(null);
+
     try {
-      const res = await fn(...args);
-      setResult(res);
-    } catch (err) {
-      setError(err.message);
+      const res = await fetch(`${API_BASE}/api/onenote/notebooks?userId=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load notebooks');
+      setNotebooks(data.notebooks || []);
+    } catch (e) {
+      setErr(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const summarize = () => run(notesApi.summarize, text);
-  const translate = () => run(notesApi.translate, text, language);
-  const flashcards = () => run(notesApi.flashcards, text);
-  const practiceQs = () => run(notesApi.questions, text);
-
-  const startRecording = () => {
-    setRecording(true);
-    setError('');
-    setResult(null);
-    // TODO: Use MediaRecorder, then base64 and call notesApi.transcribe
-    setTimeout(() => {
-      setRecording(false);
-      setResult({ text: '[Mock] Voice recording: configure Azure Speech for real speech-to-text.' });
-    }, 1500);
-  };
-
-  const saveToOneNote = async () => {
-    const title = oneNoteTitle || 'Study note';
+  const loadSections = async (notebookId) => {
+    if (!userId || !notebookId) return;
     setLoading(true);
-    setError('');
+    setErr('');
+    setSections([]);
+    setPages([]);
+    setSelectedNotebookId(notebookId);
+    setSelectedSectionId(null);
+
     try {
-      const res = await notesApi.saveOnenote(userId, title, text || result?.translatedText || result?.reply || '');
-      setResult(res);
-    } catch (err) {
-      setError(err.message);
+      const res = await fetch(
+        `${API_BASE}/api/onenote/notebooks/${encodeURIComponent(notebookId)}/sections?userId=${encodeURIComponent(userId)}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load sections');
+      setSections(data.sections || []);
+    } catch (e) {
+      setErr(e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadPages = async (sectionId) => {
+    if (!userId || !sectionId) return;
+    setLoading(true);
+    setErr('');
+    setPages([]);
+    setSelectedSectionId(sectionId);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/onenote/sections/${encodeURIComponent(sectionId)}/pages?userId=${encodeURIComponent(userId)}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load pages');
+      setPages(data.pages || []);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const paneStyle = {
+    border: '1px solid rgba(0,0,0,0.08)',
+    borderRadius: 10,
+    background: 'white',
+    overflow: 'hidden'
+  };
+
+  const headerStyle = {
+    padding: '10px 12px',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+    background: '#f7f7f9',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  };
+
+  const listItem = (active) => ({
+    padding: '10px 12px',
+    cursor: 'pointer',
+    background: active ? '#eef3ff' : 'white',
+    borderBottom: '1px solid rgba(0,0,0,0.06)'
+  });
 
   return (
     <div>
       <h2>Notes</h2>
+
+      {/* ✅ OneNote Explorer */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <h3 style={{ marginBottom: 6 }}>OneNote</h3>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Browse notebooks → sections → pages. Click Open to launch in OneNote.
+            </p>
+          </div>
+          <button className="btn" type="button" onClick={loadNotebooks} disabled={loading || !userId}>
+            {loading ? 'Loading…' : 'Load OneNote'}
+          </button>
+        </div>
+
+        {err && <p className="error" style={{ marginTop: 10 }}>{err}</p>}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 12, marginTop: 12 }}>
+          {/* Notebooks */}
+          <div style={paneStyle}>
+            <div style={headerStyle}>
+              <strong>Notebooks</strong>
+              {selectedNotebook?.url && (
+                <a href={selectedNotebook.url} target="_blank" rel="noreferrer">Open</a>
+              )}
+            </div>
+            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+              {notebooks.length === 0 && (
+                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                  {loading ? 'Loading…' : 'No notebooks loaded yet.'}
+                </div>
+              )}
+              {notebooks.map((n) => (
+                <div
+                  key={n.id}
+                  style={listItem(n.id === selectedNotebookId)}
+                  onClick={() => loadSections(n.id)}
+                  title={n.name}
+                >
+                  <div style={{ fontWeight: 600 }}>{n.name}</div>
+                  {n.url && (
+                    <div style={{ fontSize: 12, marginTop: 2 }}>
+                      <a href={n.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                        Open in OneNote
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sections */}
+          <div style={paneStyle}>
+            <div style={headerStyle}>
+              <strong>Sections</strong>
+              {selectedSection?.url && (
+                <a href={selectedSection.url} target="_blank" rel="noreferrer">Open</a>
+              )}
+            </div>
+            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+              {!selectedNotebookId && (
+                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                  Select a notebook
+                </div>
+              )}
+              {selectedNotebookId && sections.length === 0 && (
+                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                  {loading ? 'Loading…' : 'No sections found.'}
+                </div>
+              )}
+              {sections.map((s) => (
+                <div
+                  key={s.id}
+                  style={listItem(s.id === selectedSectionId)}
+                  onClick={() => loadPages(s.id)}
+                  title={s.name}
+                >
+                  <div style={{ fontWeight: 600 }}>{s.name}</div>
+                  {s.url && (
+                    <div style={{ fontSize: 12, marginTop: 2 }}>
+                      <a href={s.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                        Open section
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pages */}
+          <div style={paneStyle}>
+            <div style={headerStyle}>
+              <strong>Pages</strong>
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                {pages.length ? `${pages.length} loaded` : ''}
+              </span>
+            </div>
+            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+              {!selectedSectionId && (
+                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                  Select a section
+                </div>
+              )}
+              {selectedSectionId && pages.length === 0 && (
+                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                  {loading ? 'Loading…' : 'No pages found.'}
+                </div>
+              )}
+              {pages.map((p) => (
+                <div key={p.id} style={{ padding: '10px 12px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontWeight: 600 }}>{p.title}</div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
+                    {p.url ? (
+                      <a href={p.url} target="_blank" rel="noreferrer">Open page</a>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No link</span>
+                    )}
+                    {p.lastModifiedDateTime && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        Updated {new Date(p.lastModifiedDateTime).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Existing area (keep) */}
       <div className="card">
         <h3>Paste text or upload (optional)</h3>
-        <div className="form-group">
-          <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste your notes here…" style={{ width: '100%' }} />
-        </div>
-        <p>
-          <button type="button" className="btn btn-secondary" onClick={startRecording} disabled={loading}>
-            {recording ? 'Recording…' : 'Voice record (speech-to-text)'}
-          </button>
-        </p>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Paste your notes here..."
+          style={{ width: '100%', minHeight: 160 }}
+        />
+        <button type="button" className="btn" style={{ marginTop: 10 }}>
+          Voice record (speech-to-text)
+        </button>
       </div>
 
       <div className="card">
         <h3>Actions</h3>
-        <p style={{ marginBottom: 12 }}>AI suggests; you control (accept / edit / ignore).</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button type="button" className="btn" onClick={summarize} disabled={loading || !text.trim()}>Summarize</button>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <select className="language-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>{l.name}</option>
-              ))}
-            </select>
-            <button type="button" className="btn" onClick={translate} disabled={loading || !text.trim()}>Translate</button>
-          </div>
-          <button type="button" className="btn" onClick={flashcards} disabled={loading || !text.trim()}>Generate flashcards</button>
-          <button type="button" className="btn" onClick={practiceQs} disabled={loading || !text.trim()}>Generate practice Qs</button>
+        <p style={{ color: 'var(--text-muted)' }}>AI suggests; you control (accept / edit / ignore).</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button type="button" className="btn">Summarize</button>
+          <button type="button" className="btn">Translate</button>
+          <button type="button" className="btn">Generate flashcards</button>
+          <button type="button" className="btn">Generate practice Qs</button>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {loading && <p className="loading">Loading…</p>}
-      {result && !loading && (
-        <div className="card">
-          <h3>Result</h3>
-          {result.translatedText != null && <p>{result.translatedText}</p>}
-          {result.reply != null && <p>{result.reply}</p>}
-          {result.text != null && !result.reply && !result.translatedText && <p>{result.text}</p>}
-          {result.explanation && <p style={{ color: 'var(--text-muted)' }}>{result.explanation}</p>}
-        </div>
-      )}
-
       <div className="card">
         <h3>Export / Save to OneNote</h3>
-        <p>OneNote-ready format; Save uses Graph when configured (mock otherwise).</p>
-        <div className="form-group">
-          <label>Title for OneNote page</label>
-          <input type="text" value={oneNoteTitle} onChange={(e) => setOneNoteTitle(e.target.value)} placeholder="My study note" />
-        </div>
-        <button type="button" className="btn" onClick={saveToOneNote} disabled={loading}>Save to OneNote</button>
+        <p style={{ color: 'var(--text-muted)' }}>
+          (Optional) You can keep this as a “future work” bullet if time is tight.
+        </p>
+        <button type="button" className="btn">Save to OneNote</button>
       </div>
     </div>
   );

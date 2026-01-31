@@ -110,3 +110,7 @@ input, select, textarea { font: inherit; }
 .suggestion-card-preview { color: var(--text-muted); font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-bottom: 8px; }
 .suggestion-card-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .suggestion-card-actions .btn { padding: 6px 12px; font-size: 13px; }
+
+/* Calendar: assignment deadlines (all-day) vs regular events */
+.fc-event-assignment { background: #c65911 !important; border-color: #8a3d09 !important; }
+.fc-event-assignment:hover { background: #a34a0e !important; }

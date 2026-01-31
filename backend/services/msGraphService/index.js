@@ -187,6 +187,6 @@ export function getStoredAccessToken(userId) {
 }
 
 /**
- * Calendar exports (used by routes/calendar.js)
+ * Calendar exports (used by routes/calendar.js and routes/events.js)
  */
-export { getCalendarEvents, createCalendarEvent };
+export { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from './calendar.graph.js';

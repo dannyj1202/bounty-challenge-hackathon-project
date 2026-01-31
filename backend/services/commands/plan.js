@@ -1,6 +1,7 @@
 /**
- * /plan — create 2–5 pending study block suggestions (create_calendar_block)
- * that avoid conflicts with existing events. Deterministic, no AI.
+ * /plan — create study block suggestions (create_calendar_block) spread across
+ * the period from today until the furthest assignment due date. Avoids conflicts
+ * with existing events. Supports spread: light | balanced | intensive.
  */
 
 import { getDb } from '../../db/index.js';
@@ -9,9 +10,11 @@ const WORKING_START = 8;   // 08:00
 const WORKING_END = 22;    // 22:00
 const DEFAULT_DURATION = 60; // minutes
 const LONG_BLOCK = 90;     // optional 90-min block
-const PLANNING_DAYS = 7;
-const MIN_BLOCKS = 2;
-const MAX_BLOCKS = 5;
+const MIN_PLANNING_DAYS = 7;   // at least 7 days if no assignments
+const MAX_PLANNING_DAYS = 84;  // cap at 12 weeks
+/** Blocks per week by spread: light=2, balanced=4, intensive=6 */
+const BLOCKS_PER_WEEK = { light: 2, balanced: 4, intensive: 6 };
+const DEFAULT_SPREAD = 'balanced';
 
 function todayStr() {
   const d = new Date();
@@ -54,19 +57,33 @@ export async function run({ userId, messages, context, args }) {
   const db = getDb();
   const now = new Date();
   const today = todayStr();
-  const endDate = new Date(now);
-  endDate.setDate(endDate.getDate() + PLANNING_DAYS);
-  const endDateStr = endDate.toISOString().slice(0, 10);
+  const spread = (context?.spread && BLOCKS_PER_WEEK[context.spread]) ? context.spread : DEFAULT_SPREAD;
+  const blocksPerWeek = BLOCKS_PER_WEEK[spread];
 
   // Upcoming assignments (incomplete, due >= today; due-soon first)
   const assignments = db.prepare(
     `SELECT id, title, dueDate FROM assignments
      WHERE userId = ? AND completed = 0 AND (dueDate IS NULL OR dueDate >= ?)
      ORDER BY (dueDate IS NULL), dueDate ASC
-     LIMIT 10`
+     LIMIT 20`
   ).all(userId, today);
 
-  // Events that overlap the planning window (any overlap, not only fully inside)
+  // Planning window: from today until furthest due date (or MIN_PLANNING_DAYS), capped at MAX_PLANNING_DAYS
+  let planningDays = MIN_PLANNING_DAYS;
+  if (assignments.length > 0) {
+    const withDue = assignments.filter((a) => a.dueDate);
+    if (withDue.length > 0) {
+      const furthestDue = withDue[withDue.length - 1].dueDate;
+      const dueDate = new Date(furthestDue + 'T23:59:59');
+      const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      planningDays = Math.min(MAX_PLANNING_DAYS, Math.max(MIN_PLANNING_DAYS, daysUntilDue));
+    }
+  }
+  const endDate = new Date(now);
+  endDate.setDate(endDate.getDate() + planningDays);
+  const endDateStr = endDate.toISOString().slice(0, 10);
+
+  // Events that overlap the planning window
   const windowStart = today + ' 00:00:00';
   const windowEnd = endDateStr + ' 23:59:59';
   const events = db.prepare(
@@ -84,7 +101,7 @@ export async function run({ userId, messages, context, args }) {
   const base = new Date(now);
   base.setHours(0, 0, 0, 0);
 
-  for (let d = 0; d < PLANNING_DAYS; d++) {
+  for (let d = 0; d < planningDays; d++) {
     const dayStart = new Date(base);
     dayStart.setDate(dayStart.getDate() + d);
     for (let h = WORKING_START; h < WORKING_END; h++) {
@@ -93,60 +110,75 @@ export async function run({ userId, messages, context, args }) {
       const slotEnd = new Date(slotStart.getTime() + DEFAULT_DURATION * 60 * 1000);
       const s = slotStart.getTime();
       const e = slotEnd.getTime();
-      if (e <= nowTs) continue; // skip slots that already ended
+      if (e <= nowTs) continue;
       const conflict = busy.some((b) => overlaps(s, e, b.start, b.end));
       if (!conflict) slots.push({ start: slotStart, end: slotEnd, duration: DEFAULT_DURATION });
     }
   }
 
-  // Sort by start time and take first 2–5 non-overlapping (60-min slots; no overlap with busy)
-  slots.sort((a, b) => a.start.getTime() - b.start.getTime());
-  const chosen = [];
-  let lastEnd = 0;
-  for (const slot of slots) {
-    if (chosen.length >= MAX_BLOCKS) break;
-    if (slot.start.getTime() >= lastEnd) {
-      chosen.push(slot);
-      lastEnd = slot.end.getTime();
-    }
-  }
-  // Optionally add one 90-min block if we have room (first free 90-min window)
-  if (chosen.length >= MIN_BLOCKS && chosen.length < MAX_BLOCKS) {
-    for (let d = 0; d < PLANNING_DAYS; d++) {
-      const dayStart = new Date(base);
-      dayStart.setDate(dayStart.getDate() + d);
-      for (let h = WORKING_START; h <= WORKING_END - 2; h++) {
-        const slotStart = new Date(dayStart);
-        slotStart.setHours(h, 0, 0, 0);
-        const slotEnd = new Date(slotStart.getTime() + LONG_BLOCK * 60 * 1000);
-        const s = slotStart.getTime();
-        const e = slotEnd.getTime();
-        if (e <= nowTs) continue; // skip past
-        const busyConflict = busy.some((b) => overlaps(s, e, b.start, b.end));
-        const chosenConflict = chosen.some((c) => overlaps(s, e, c.start.getTime(), c.end.getTime()));
-        if (!busyConflict && !chosenConflict) {
-          chosen.push({ start: slotStart, end: slotEnd, duration: LONG_BLOCK });
-          break;
-        }
-      }
-      if (chosen.some((c) => c.duration === LONG_BLOCK)) break;
-    }
-  }
+  // Target: spread blocks evenly across the period (blocksPerWeek * weeks)
+  const weeks = Math.max(1, Math.ceil(planningDays / 7));
+  const targetBlocks = Math.min(blocksPerWeek * weeks, 30); // cap total blocks at 30
 
-  if (chosen.length < MIN_BLOCKS) {
+  // Prefer one block per day when possible: group slots by day, then pick slots spread across days
+  const slotsByDay = new Map();
+  for (const slot of slots) {
+    const dayKey = slot.start.toISOString().slice(0, 10);
+    if (!slotsByDay.has(dayKey)) slotsByDay.set(dayKey, []);
+    slotsByDay.get(dayKey).push(slot);
+  }
+  const sortedDays = [...slotsByDay.keys()].sort();
+  const chosen = [];
+  const used = new Set();
+  // Spread: pick one slot per day in round-robin across days until we have targetBlocks
+  let dayIndex = 0;
+  while (chosen.length < targetBlocks && sortedDays.length > 0) {
+    const dayKey = sortedDays[dayIndex % sortedDays.length];
+    const daySlots = slotsByDay.get(dayKey) || [];
+    const slot = daySlots.find((sl) => {
+      const key = sl.start.getTime();
+      if (used.has(key)) return false;
+      const conflict = chosen.some((c) => overlaps(c.start.getTime(), c.end.getTime(), sl.start.getTime(), sl.end.getTime()));
+      return !conflict;
+    });
+    if (slot) {
+      chosen.push(slot);
+      used.add(slot.start.getTime());
+    }
+    dayIndex++;
+    if (dayIndex > sortedDays.length * 2 && chosen.length < targetBlocks) break; // avoid infinite loop
+  }
+  // If we didn't get enough by one-per-day, fill from remaining slots in time order
+  slots.sort((a, b) => a.start.getTime() - b.start.getTime());
+  for (const slot of slots) {
+    if (chosen.length >= targetBlocks) break;
+    if (used.has(slot.start.getTime())) continue;
+    const conflict = chosen.some((c) => overlaps(c.start.getTime(), c.end.getTime(), slot.start.getTime(), slot.end.getTime()));
+    if (!conflict) {
+      chosen.push(slot);
+      used.add(slot.start.getTime());
+    }
+  }
+  chosen.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const minBlocks = spread === 'light' ? 2 : 4;
+  if (chosen.length < minBlocks) {
     return {
-      reply: 'No available study slots in the next 7 days (08:00–22:00). Your calendar is full or the window is too short. Try freeing some time or use a different period.',
+      reply: `Not enough free study slots in the next ${planningDays} days (08:00–22:00). Your calendar is busy. Try "Light" spread or free some time.`,
       suggestions: [],
     };
   }
 
-  const firstTitle = assignments.length > 0 ? assignments[0].title : 'General review';
-  const topic = args.trim() || firstTitle;
+  // Topic per block: cycle through assignments so blocks are spread by assignment
+  const topicList = assignments.length > 0
+    ? assignments.map((a) => a.title)
+    : ['General review'];
   const inserted = [];
 
   for (let i = 0; i < chosen.length; i++) {
     const slot = chosen[i];
-    const title = i === 0 && topic ? `Study: ${topic}` : `Study: ${topic} (block ${i + 1})`;
+    const topic = topicList[i % topicList.length];
+    const title = chosen.length === 1 ? `Study: ${topic}` : `Study: ${topic} (block ${i + 1})`;
     const startStr = toSqliteDatetime(slot.start);
     const endStr = toSqliteDatetime(slot.end);
     const payload = JSON.stringify({ title, start: startStr, end: endStr });
@@ -171,8 +203,6 @@ export async function run({ userId, messages, context, args }) {
     } catch {}
     return { title: p.title, start: p.start, end: p.end };
   });
-  const reply = [
-    `Suggested ${inserted.length} study block(s) for the next 7 days (no overlap with your events). Use Accept in the UI to add them.`,
-  ].join('\n');
-  return { reply, suggestions: inserted, structured: { blocks }, citations: [] };
+  const reply = `Suggested ${inserted.length} study blocks spread over the next ${planningDays} days (until your furthest assignment) with "${spread}" pacing. No overlap with your events. Accept in the UI to add them to your calendar.`;
+  return { reply, suggestions: inserted, structured: { blocks, spread, planningDays }, citations: [] };
 }
