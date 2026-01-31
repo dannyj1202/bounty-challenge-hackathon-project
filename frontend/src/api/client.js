@@ -1,4 +1,5 @@
-const API_BASE = '/api';
+const BACKEND_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://localhost:3001';
+const API_BASE = `${BACKEND_ORIGIN}/api`;
 
 function getToken() {
   try {
@@ -31,13 +32,17 @@ export async function api(method, path, body = null) {
   return data;
 }
 
-const BACKEND_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://localhost:3001';
-
 export const auth = {
   mockLogin: (email, role) => api('POST', '/auth/mock-login', { email, role }),
-  /** Build Microsoft login URL (use query param; pass string userId from useAuth().userId). */
+  /** First-time sign-in: no userId (backend uses state=signup). */
+  getMicrosoftLoginUrlFirstTime: () => `${BACKEND_ORIGIN}/api/auth/microsoft/login`,
+  /** Link existing user: pass userId from useAuth().userId. */
   getMicrosoftLoginUrl: (userId) =>
-    `${BACKEND_ORIGIN}/api/auth/microsoft/login?userId=${encodeURIComponent(String(userId))}`,
+    userId
+      ? `${BACKEND_ORIGIN}/api/auth/microsoft/login?userId=${encodeURIComponent(String(userId))}`
+      : `${BACKEND_ORIGIN}/api/auth/microsoft/login`,
+  /** Status: { connected, username, expiresAt }. */
+  getMicrosoftStatus: (userId) => api('GET', `/auth/microsoft/status?userId=${encodeURIComponent(userId)}`),
 };
 export const user = {
   getPreferences: (userId) => api('GET', `/user/preferences?userId=${encodeURIComponent(userId)}`),

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../context/PlanContext';
-import { user as userApi } from '../api/client';
+import { user as userApi, auth as authApi } from '../api/client';
 
 const WIDGET_OPTIONS = [
   { id: 'notifications', label: 'Notifications' },
@@ -11,8 +11,10 @@ const WIDGET_OPTIONS = [
 ];
 
 export default function Settings() {
-  const { userId } = useAuth();
+  const { userId, user, token, login } = useAuth();
   const { plan, isInstitutionAdmin, institutionBranding, setInstitutionBranding } = usePlan();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [msStatus, setMsStatus] = useState({ connected: false, username: null, expiresAt: null });
   const [widgets, setWidgets] = useState(WIDGET_OPTIONS.map((w) => w.id));
   const [notifications, setNotifications] = useState({ email: true, push: false });
   const [monetizationAck, setMonetizationAck] = useState(false);
@@ -22,6 +24,30 @@ export default function Settings() {
   const [brandingLogoUrl, setBrandingLogoUrl] = useState(institutionBranding?.logoUrl || '');
   const [brandingColor, setBrandingColor] = useState(institutionBranding?.primaryColor || '#0078d4');
   const [brandingSaved, setBrandingSaved] = useState(false);
+
+  // Handle callback redirect: /settings?ms=connected (link flow) or ?ms=connected&userId=...&token=...
+  useEffect(() => {
+    const ms = searchParams.get('ms');
+    const callbackUserId = searchParams.get('userId');
+    const callbackToken = searchParams.get('token');
+    const callbackEmail = searchParams.get('email');
+    const callbackRole = searchParams.get('role') || 'student';
+    if (ms === 'connected') {
+      if (callbackUserId && callbackToken) {
+        login(
+          { id: callbackUserId, email: callbackEmail || '', role: callbackRole },
+          callbackToken
+        );
+      }
+      setSearchParams({});
+    }
+  }, [searchParams, login, setSearchParams]);
+
+  // Fetch Microsoft connection status when userId exists
+  useEffect(() => {
+    if (!userId) return;
+    authApi.getMicrosoftStatus(userId).then(setMsStatus).catch(() => setMsStatus({ connected: false, username: null, expiresAt: null }));
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -72,6 +98,32 @@ export default function Settings() {
   return (
     <div>
       <h2>Settings</h2>
+
+      <div className="card">
+        <h3>Microsoft account</h3>
+        {msStatus.connected ? (
+          <p>
+            <span style={{ color: 'var(--success)' }}>Microsoft connected ✅</span>
+            {msStatus.username && <span style={{ marginLeft: 8 }}>— {msStatus.username}</span>}
+            {msStatus.expiresAt && (
+              <span style={{ display: 'block', fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
+                Token expires: {new Date(msStatus.expiresAt).toLocaleString()}
+              </span>
+            )}
+          </p>
+        ) : userId ? (
+          <p>
+            <span style={{ color: 'var(--text-muted)' }}>Not connected</span>
+            {' — '}
+            <a href={authApi.getMicrosoftLoginUrl(userId)} className="btn">
+              Connect Microsoft
+            </a>
+          </p>
+        ) : (
+          <p style={{ color: 'var(--text-muted)' }}>Sign in to link your Microsoft account.</p>
+        )}
+      </div>
+
       <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
         Current plan: <strong>{plan === 'free' ? 'Free' : plan === 'elite' ? 'Elite' : 'Institution'}</strong>
         {' — '}

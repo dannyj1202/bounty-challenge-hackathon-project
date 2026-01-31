@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth as authApi } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -31,11 +32,18 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('smart-study-auth');
   };
 
+  /** Dev only: sign in with mock backend, then store user + token. */
+  const loginWithMock = async (email, role = 'student') => {
+    const res = await authApi.mockLogin(email, role);
+    login(res.user, res.token);
+    return res;
+  };
+
   const userId = user?.id ?? null;
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, token, userId, isAdmin, login, logout }}>
+    <AuthContext.Provider value={{ user, token, userId, isAdmin, login, logout, loginWithMock }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { auth, dev } from '../api/client';
+import { auth } from '../api/client';
 
 export default function Login() {
   const [email, setEmail] = useState('student@university.edu');
   const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, loginWithMock } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Handle Microsoft sign-in callback (no-userId first-time sign-in)
+  // Handle Microsoft callback (first-time sign-in: backend redirects to /login?ms=callback&token=...&userId=...)
   useEffect(() => {
     const ms = searchParams.get('ms');
     const token = searchParams.get('token');
@@ -39,8 +39,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const res = await auth.mockLogin(email, role);
-      login(res.user, res.token);
+      await loginWithMock(email, role);
       navigate('/home');
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -49,51 +48,45 @@ export default function Login() {
     }
   };
 
-  const handleSeedDemo = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const res = await dev.seed();
-      login(res.user, res.token);
-      navigate('/home');
-    } catch (err) {
-      setError(err.message || 'Seed failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="main" style={{ maxWidth: 400, margin: '40px auto' }}>
-      <div className="card">
+    <div className="login-page">
+      <div className="card login-card">
         <h2>Sign in</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Mock university login (Entra ID OAuth ready)</p>
-        <form onSubmit={handleMockLogin}>
+        <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
+          Use your Microsoft account to sign in, or use mock login for development.
+        </p>
+
+        <a href={auth.getMicrosoftLoginUrlFirstTime()} className="btn btn-primary btn-block">
+          Continue with Microsoft
+        </a>
+
+        <div className="login-divider">
+          <span>or</span>
+        </div>
+
+        <form onSubmit={handleMockLogin} className="login-form">
           <div className="form-group">
-            <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@university.edu" />
+            <label>Email (dev)</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@university.edu"
+              required
+            />
           </div>
           <div className="form-group">
-            <label>Role</label>
+            <label>Role (dev)</label>
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="student">Student</option>
               <option value="admin">Admin</option>
             </select>
           </div>
           {error && <p className="error">{error}</p>}
-          <button type="submit" className="btn" disabled={loading}>{loading ? 'Signing in…' : 'Sign in (mock)'}</button>
+          <button type="submit" className="btn btn-secondary btn-block" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in with mock (dev)'}
+          </button>
         </form>
-        <p style={{ marginTop: 16 }}>
-          <button type="button" className="btn btn-secondary" onClick={handleSeedDemo} disabled={loading}>Quick demo (seed data)</button>
-        </p>
-        <p style={{ marginTop: 16 }}>
-          <a href={auth.getMicrosoftLoginUrl('')} className="btn btn-secondary">
-            Sign in with Microsoft
-          </a>
-        </p>
-        <p style={{ marginTop: 12, fontSize: 14, color: 'var(--text-muted)' }}>
-          First-time users: click above. Already have an account? Use mock sign-in, then connect Microsoft in Settings.
-        </p>
       </div>
     </div>
   );
