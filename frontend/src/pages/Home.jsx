@@ -5,7 +5,7 @@ import { usePlan } from '../context/PlanContext';
 import { assignments, copilot, notifications, user, docs } from '../api/client';
 
 const WIDGET_IDS = ['notifications', 'tasks', 'copilot'];
-const DOC_COMMAND_CHIPS = ['/summarize', '/flashcards', '/quiz', '/notes'];
+const COMMAND_CHIPS = ['/help', '/plan', '/summarize', '/flashcards', '/quiz', '/notes', '/check', '/tasks', '/deadline', '/reschedule'];
 
 export default function Home() {
   const { userId } = useAuth();
@@ -42,14 +42,14 @@ export default function Home() {
   const buildStreamPayload = (userMsg) => ({
     userId,
     messages: [...messages, userMsg],
-    ...(activeDocument?.noteId ? { noteId: activeDocument.noteId } : {}),
+    ...(activeDocument?.noteId ? { noteId: activeDocument.noteId, attachments: [activeDocument.noteId], useRag: true } : {}),
   });
 
   const sendMessage = async (commandOverride = null) => {
     const raw = commandOverride ?? input.trim();
     if (!raw) return;
     if (!raw.startsWith('/')) {
-      setError('Commands only. Use a command starting with / (e.g. /help, /plan) or click a chip.');
+      setError('');
       return;
     }
     if (!canUseCopilot) {
@@ -65,6 +65,8 @@ export default function Home() {
     try {
       let fullReply = '';
       let suggestions = [];
+      let structured = null;
+      let citations = [];
       for await (const event of copilot.chatStream(buildStreamPayload(userMsg))) {
         if (event.type === 'chunk' && event.text) {
           fullReply += event.text;
@@ -82,13 +84,29 @@ export default function Home() {
             if (last?.role === 'assistant') next[next.length - 1] = { ...last, reply: fullReply, suggestions, streaming: false };
             return next;
           });
+        } else if (event.type === 'structured') {
+          structured = event.structured;
+          setMessages((m) => {
+            const next = [...m];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') next[next.length - 1] = { ...last, structured };
+            return next;
+          });
+        } else if (event.type === 'citations' && Array.isArray(event.citations)) {
+          citations = event.citations;
+          setMessages((m) => {
+            const next = [...m];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') next[next.length - 1] = { ...last, citations };
+            return next;
+          });
         } else if (event.type === 'error') {
           setError(event.message || 'Stream error');
         } else if (event.type === 'done') {
           setMessages((m) => {
             const next = [...m];
             const last = next[next.length - 1];
-            if (last?.role === 'assistant') next[next.length - 1] = { ...last, streaming: false };
+            if (last?.role === 'assistant') next[next.length - 1] = { ...last, streaming: false, ...(structured != null && { structured }), ...(citations.length > 0 && { citations }) };
             return next;
           });
         }
@@ -238,20 +256,22 @@ export default function Home() {
               </button>
               {uploadError && <span className="error" style={{ marginLeft: 8 }}>{uploadError}</span>}
               {activeDocument && (
-                <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-muted)' }}>
-                  Active document: <strong>{activeDocument.title}</strong>
-                  <button type="button" className="btn btn-secondary" style={{ marginLeft: 8, padding: '2px 8px', fontSize: 12 }} onClick={() => setActiveDocument(null)}>Clear</button>
-                </div>
+                <span className="badge" style={{ marginLeft: 8, padding: '4px 8px', fontSize: 12, background: 'var(--primary)', color: 'white', borderRadius: 4 }}>
+                  Uploaded: 1 — {activeDocument.title}
+                </span>
               )}
               {activeDocument && (
-                <div className="command-chips" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {DOC_COMMAND_CHIPS.map((cmd) => (
-                    <button key={cmd} type="button" className="btn btn-secondary command-chip" onClick={() => sendMessage(cmd)} disabled={!canUseCopilot || loading}>
-                      {cmd}
-                    </button>
-                  ))}
+                <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-muted)' }}>
+                  <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setActiveDocument(null)}>Clear</button>
                 </div>
               )}
+              <div className="command-chips" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {COMMAND_CHIPS.map((cmd) => (
+                  <button key={cmd} type="button" className="btn btn-secondary command-chip" onClick={() => sendMessage(cmd)} disabled={!canUseCopilot || loading}>
+                    {cmd}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ marginBottom: 12 }}>
               {messages.map((m, i) => (
@@ -261,6 +281,33 @@ export default function Home() {
                       <div>
                         {m.streaming && !m.reply ? 'Copilot is thinking…' : m.reply}
                       </div>
+                      {m.structured && (
+                        <div className="structured-output" style={{ marginTop: 12, padding: 12, background: 'var(--bg-muted)', borderRadius: 8 }}>
+                          {m.structured.keyPoints && (
+                            <div><strong>Key points</strong><ul>{m.structured.keyPoints.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
+                          )}
+                          {m.structured.cards && (
+                            <div><strong>Flashcards</strong><ul>{m.structured.cards.map((c, i) => <li key={i}><strong>Q:</strong> {c.q} <strong>A:</strong> {c.a}</li>)}</ul></div>
+                          )}
+                          {m.structured.questions && (
+                            <div><strong>Questions</strong><ul>{m.structured.questions.map((q, i) => <li key={i}>{q.q} → {q.answer}</li>)}</ul></div>
+                          )}
+                          {m.structured.outline && (
+                            <div><strong>Outline</strong><ul>{m.structured.outline.map((o, i) => <li key={i}>{o}</li>)}</ul></div>
+                          )}
+                          {m.structured.glossary && (
+                            <div><strong>Glossary</strong><ul>{m.structured.glossary.map((g, i) => <li key={i}><strong>{g.term}</strong>: {g.definition}</li>)}</ul></div>
+                          )}
+                          {m.structured.commands && (
+                            <div><strong>Commands</strong><ul>{m.structured.commands.map((c, i) => <li key={i}>{c.cmd}: {c.description}</li>)}</ul></div>
+                          )}
+                        </div>
+                      )}
+                      {m.citations && m.citations.length > 0 && (
+                        <div className="citations" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                          <strong>Sources:</strong> {m.citations.map((c, i) => <span key={i} title={c.content}>[{c.id}] </span>)}
+                        </div>
+                      )}
                       {m.explanation && <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-muted)' }}>{m.explanation}</div>}
                       {m.confidence != null && <div className="confidence">Confidence: {(m.confidence * 100).toFixed(0)}%</div>}
                       {m.role === 'assistant' && m.suggestions && m.suggestions.length > 0 && (
@@ -293,9 +340,9 @@ export default function Home() {
             {error && <p className="error">{error}</p>}
             {input.trim() && !input.trim().startsWith('/') && (
               <p className="copilot-tip" style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Commands start with /. Try: {DOC_COMMAND_CHIPS.map((c) => (
+                Commands start with /. Try: {COMMAND_CHIPS.slice(0, 5).map((c) => (
                   <button key={c} type="button" className="link-like" onClick={() => setInput(c)} style={{ marginRight: 8, background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0 }}>{c}</button>
-                ))}
+                ))} or click a chip above.
               </p>
             )}
             <div style={{ display: 'flex', gap: 8 }}>

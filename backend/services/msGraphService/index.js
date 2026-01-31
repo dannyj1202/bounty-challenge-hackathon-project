@@ -43,17 +43,28 @@ function assertConfigured() {
   }
 }
 
+/** Redirect URI must match Azure app registration and be identical for authorize + token exchange (no trailing slash). */
+function getRedirectUri() {
+  const raw = process.env.ENTRA_REDIRECT_URI || "";
+  return raw.trim().replace(/\/+$/, "") || null;
+}
+
 /**
  * Build Entra authorize URL.
  * state carries userId so we can store tokens on callback.
  */
 export async function getAuthorizeUrl(state = "") {
   assertConfigured();
+  if (!msalApp) {
+    throw new Error("MSAL not initialized. Set USE_ENTRA_AUTH=true in .env");
+  }
   const scopes = getScopes();
+  const redirectUri = getRedirectUri();
+  if (!redirectUri) throw new Error("ENTRA_REDIRECT_URI is empty");
 
   return msalApp.getAuthCodeUrl({
     scopes,
-    redirectUri: process.env.ENTRA_REDIRECT_URI,
+    redirectUri,
     state: String(state),
     prompt: "select_account",
   });
@@ -64,15 +75,35 @@ export async function getAuthorizeUrl(state = "") {
  */
 export async function exchangeCodeOnly(code) {
   assertConfigured();
+  if (!msalApp) {
+    throw new Error("MSAL not initialized. Set USE_ENTRA_AUTH=true in .env");
+  }
   const scopes = getScopes();
+  const redirectUri = getRedirectUri();
+  if (!redirectUri) throw new Error("ENTRA_REDIRECT_URI is empty");
 
-  const tokenResponse = await msalApp.acquireTokenByCode({
-    code: String(code),
-    scopes,
-    redirectUri: process.env.ENTRA_REDIRECT_URI,
-  });
+  console.log("[auth] exchangeCodeOnly redirectUri=" + redirectUri + " scopesCount=" + scopes.length);
 
-  return tokenResponse;
+  try {
+    const tokenResponse = await msalApp.acquireTokenByCode({
+      code: String(code),
+      scopes,
+      redirectUri,
+    });
+    return tokenResponse;
+  } catch (err) {
+    const msg = err.message || String(err);
+    const code = err.errorCode || err.code || "";
+    const body = err.response?.body ?? err.body ?? "";
+    const bodyStr = typeof body === "string" ? body : JSON.stringify(body);
+    console.error("[auth] MSAL acquireTokenByCode failed:", {
+      errorCode: code,
+      message: msg,
+      redirectUriUsed: redirectUri,
+      responseBody: bodyStr ? bodyStr.slice(0, 500) : "(none)",
+    });
+    throw err;
+  }
 }
 
 /**

@@ -106,11 +106,15 @@ export async function run({ userId, messages, context, args }) {
     inserted.push(row);
   }
 
+  const milestoneItems = inserted.map((s) => {
+    let p = {};
+    try {
+      p = s.payload ? JSON.parse(s.payload) : {};
+    } catch {}
+    return { title: p.title || s.label, dueDate: p.dueDate };
+  });
   const reply = [
-    `Created ${inserted.length} milestone task(s) leading to ${deadlineStr}.`,
-    '',
-    'To accept: POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }',
-    'To reject: POST /api/copilot/suggestions/:id/reject with body { "userId": "<your userId>" }',
+    `Created ${inserted.length} milestone task(s) leading to ${deadlineStr}. Use Accept in the UI to add them.`,
   ].join('\n');
-  return { reply, suggestions: inserted };
+  return { reply, suggestions: inserted, structured: { milestones: milestoneItems, reminders: [] }, citations: [] };
 }

@@ -12,7 +12,9 @@ export async function getCalendarEvents({ userId, start, end, accessToken }) {
   if (!useGraph || !accessToken) return mock.getCalendarEvents({ userId, start, end });
   const path = `/me/calendar/calendarView?startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}`;
   const data = await oauth.graphRequest(accessToken, 'GET', path);
-  return (data?.value || []).map((e) => ({
+  const raw = data?.value || [];
+  console.log("[calendar/graph] calendarView start=" + start + " end=" + end + " -> " + raw.length + " events from Outlook");
+  return raw.map((e) => ({
     id: e.id,
     subject: e.subject,
     start: e.start,

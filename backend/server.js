@@ -21,6 +21,7 @@ import devRoutes from './routes/dev.js';
 import communityRoutes from './routes/community.js';
 import calendarRoutes from './routes/calendar.js';
 import docsRoutes from './routes/docs.js';
+import documentsRoutes from './routes/documents.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -64,14 +65,65 @@ app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/docs', docsRoutes);
+app.use('/api/documents', documentsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-app.listen(PORT, () => {
-  console.log(`Smart Study Copilot API running at http://localhost:${PORT}`);
+// GET /api/health/azure — verify OpenAI chat, embeddings, Search, Document Intelligence
+app.get('/api/health/azure', async (req, res) => {
+  const checks = { openaiChat: false, openaiEmbeddings: false, search: false, documentIntelligence: false };
+  const errors = [];
+  try {
+    const openai = await import('./services/azureOpenAIClient.js');
+    if (openai.isConfigured()) {
+      try {
+        await openai.chatCompletion({ messages: [{ role: 'user', content: 'Say OK' }], maxTokens: 5 });
+        checks.openaiChat = true;
+      } catch (e) {
+        errors.push('openaiChat: ' + (e.message || 'failed'));
+      }
+      try {
+        await openai.embedOne('test');
+        checks.openaiEmbeddings = true;
+      } catch (e) {
+        errors.push('openaiEmbeddings: ' + (e.message || 'failed'));
+      }
+    }
+    const searchMod = await import('./services/azureSearchClient.js');
+    if (searchMod.isConfigured()) {
+      try {
+        await searchMod.simpleSearch({ query: '*', top: 1 });
+        checks.search = true;
+      } catch (e) {
+        errors.push('search: ' + (e.message || 'failed'));
+      }
+    }
+    const di = await import('./services/documentIntelligenceClient.js');
+    if (di.isAvailable()) {
+      checks.documentIntelligence = true;
+    }
+  } catch (e) {
+    errors.push(String(e.message));
+  }
+  const ok = checks.openaiChat && checks.openaiEmbeddings && checks.search && checks.documentIntelligence;
+  res.status(ok ? 200 : 503).json({ ok, checks, errors });
 });
 
+// 404 catch-all (so 404s don't look like 500s)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.originalUrl });
+});
+
+// Error handler MUST be last (before listen). Catches errors from routes/middleware.
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Server error', message: err.message });
+  res.status(500).json({
+    error: 'Server error',
+    message: err.message,
+    ...(process.env.NODE_ENV !== 'production' && err.stack && { stack: err.stack }),
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Smart Study Copilot API running at http://localhost:${PORT}`);
 });

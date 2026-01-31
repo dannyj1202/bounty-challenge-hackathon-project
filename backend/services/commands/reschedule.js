@@ -201,11 +201,15 @@ export async function run({ userId, messages, context, args }) {
     inserted.push(row);
   }
 
+  const alternatives = inserted.map((s) => {
+    let p = {};
+    try {
+      p = s.payload ? JSON.parse(s.payload) : {};
+    } catch {}
+    return { title: p.title, start: p.start, end: p.end };
+  });
   const reply = [
-    `Suggested ${inserted.length} alternative study block(s). Original event is unchanged.`,
-    '',
-    'To accept: POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }',
-    'To reject: POST /api/copilot/suggestions/:id/reject with body { "userId": "<your userId>" }',
+    `Suggested ${inserted.length} alternative study block(s). Use Accept to add one; original event is unchanged.`,
   ].join('\n');
-  return { reply, suggestions: inserted };
+  return { reply, suggestions: inserted, structured: { alternatives }, citations: [] };
 }

@@ -1,6 +1,6 @@
 /**
- * /check — feedback on user's attempt (structure, hints). No full answers. Read-only.
- * Requires: /check <my attempt text>. Refuses "give me the answer" / do-my-work.
+ * /check — feedback rubric, weakAreas[], suggestions[], NO rewriting full answers. citations[] optional.
+ * Refuses "give me the answer" / do-my-work.
  */
 
 const CHEATING_PHRASES = [
@@ -24,65 +24,67 @@ function deterministicFeedback(attempt) {
   const words = t.split(/\s+/).filter(Boolean);
   const hasStructure = /^\s*(\d+[.)]\s|[-*]\s)/m.test(t) || t.split('\n').filter((l) => l.trim()).length >= 2;
   const length = words.length;
-  const strengths = [];
-  if (length >= 20) strengths.push('You provided substantial content — good start.');
-  else strengths.push('You started putting ideas down — keep going.');
-  if (hasStructure) strengths.push('Your answer has some structure (lists or paragraphs).');
-  else strengths.push('Adding bullet points or short paragraphs can clarify your reasoning.');
-  const issues = [];
-  if (length < 30) issues.push('Consider expanding: add one or two more supporting points or examples.');
-  if (!/[.?!]$/.test(t)) issues.push('Consider ending with a clear concluding sentence.');
-  if (!t.match(/\b(because|therefore|so|thus|example)\b/i)) issues.push('Using linking words (because, for example, therefore) can strengthen your argument.');
-  issues.push('Re-read the question and check that each part is addressed.');
+  const weakAreas = [];
+  if (length < 30) weakAreas.push('Consider expanding: add supporting points or examples.');
+  if (!/[.?!]$/.test(t)) weakAreas.push('Consider ending with a clear concluding sentence.');
+  if (!t.match(/\b(because|therefore|so|thus|example)\b/i)) weakAreas.push('Using linking words can strengthen your argument.');
+  weakAreas.push('Re-read the question and check that each part is addressed.');
   const suggestions = [
     'Restate the main question in your own words at the start.',
     'Give one concrete example from the material if applicable.',
     'Leave a line between paragraphs for readability.',
     'Proofread for clarity before submitting.',
   ];
-  const hint = 'Hint: Focus on what the question is asking (definition? comparison? steps?). Make sure each part of the question gets at least one sentence.';
-  return {
-    strengths: strengths.slice(0, 2),
-    issues: issues.slice(0, 4),
-    suggestions: suggestions.slice(0, 4),
-    hint,
+  const rubric = {
+    structure: hasStructure ? 'Good' : 'Needs improvement',
+    length: length >= 20 ? 'Substantial' : 'Could expand',
+    clarity: length >= 30 ? 'Adequate' : 'Consider adding detail',
   };
+  return { rubric, weakAreas: weakAreas.slice(0, 4), suggestions: suggestions.slice(0, 4) };
 }
 
 export async function run({ userId, messages, context, args }) {
-  if (!userId) return { reply: 'userId required', suggestions: [] };
+  if (!userId) return { reply: 'userId required', suggestions: [], citations: [] };
 
   const attempt = (args || '').trim();
   if (!attempt) {
     return {
-      reply: 'Usage: /check <your attempt> — paste your draft or answer and I\'ll give feedback (structure, gaps, hints). I won\'t give the final answer; I\'ll help you improve yours.',
+      reply: 'Usage: /check <your attempt> — paste your draft or answer and I\'ll give feedback (structure, gaps, hints). I won\'t give the final answer.',
       suggestions: [],
+      structured: null,
+      citations: [],
     };
   }
   if (looksLikeAskingForAnswer(attempt)) {
     return {
-      reply: "I don't give final answers. Paste your own attempt (your draft or solution) and I'll give feedback: strengths, issues, and suggestions to improve. Use /check <your attempt>.",
+      reply: "I can't generate solutions or full submissions. Try /tasks or /check.",
       suggestions: [],
+      structured: null,
+      citations: [],
     };
   }
   const fb = deterministicFeedback(attempt);
   if (!fb) {
-    return { reply: 'Paste your attempt after /check so I can give feedback.', suggestions: [] };
+    return { reply: 'Paste your attempt after /check so I can give feedback.', suggestions: [], structured: null, citations: [] };
   }
   const reply = [
     'Feedback on your attempt:',
     '',
-    'Strengths:',
-    ...fb.strengths.map((s) => `• ${s}`),
+    'Rubric:',
+    `• Structure: ${fb.rubric.structure}`,
+    `• Length: ${fb.rubric.length}`,
+    `• Clarity: ${fb.rubric.clarity}`,
     '',
-    'Issues / gaps:',
-    ...fb.issues.map((s) => `• ${s}`),
+    'Areas to improve:',
+    ...fb.weakAreas.map((s) => `• ${s}`),
     '',
-    'Suggestions to improve:',
+    'Suggestions:',
     ...fb.suggestions.map((s) => `• ${s}`),
-    '',
-    'Hint:',
-    fb.hint,
   ].join('\n');
-  return { reply, suggestions: [] };
+  return {
+    reply,
+    suggestions: [],
+    structured: { rubric: fb.rubric, weakAreas: fb.weakAreas, suggestions: fb.suggestions },
+    citations: [],
+  };
 }

@@ -70,26 +70,25 @@ export default function Calendar() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to sync Outlook');
 
+      // Backend returns { id, title, startAt, endAt, type, sourceId } (already normalized)
       const incoming = (data.events || []).map((e) => ({
         id: e.id || `outlook-${Math.random()}`,
-        title: e.subject || e.title || 'Outlook event',
-        startAt: e.start?.dateTime || e.startTime || e.startAt,
-        endAt: e.end?.dateTime || e.endTime || e.endAt,
-        type: 'academic',
-        sourceId: 'outlook'
+        title: e.title || e.subject || 'Outlook event',
+        startAt: e.startAt || e.start?.dateTime || e.startTime,
+        endAt: e.endAt || e.end?.dateTime || e.endTime,
+        type: e.type || 'academic',
+        sourceId: e.sourceId || 'outlook',
       }));
 
-      // Merge into your eventList (dedupe by id)
-      setEventList((prev) => {
-        const map = new Map(prev.map((x) => [x.id, x]));
-        incoming.forEach((x) => map.set(x.id, x));
-        return Array.from(map.values());
-      });
+      // Refetch from API so calendar shows DB state (includes upserted Outlook events)
+      load();
 
       setSyncNote(
         data.source === 'outlook'
-          ? `✅ Synced ${incoming.length} Outlook events.`
-          : `✅ Loaded ${incoming.length} mock events (real Outlook sync becomes live once Entra token is connected).`
+          ? (incoming.length === 0
+              ? '✅ Synced 0 Outlook events (none in the next 30 days).'
+              : `✅ Synced ${incoming.length} Outlook events.`)
+          : `✅ Loaded ${incoming.length} mock events.`
       );
     } catch (err) {
       setError(err.message);
@@ -205,7 +204,7 @@ export default function Calendar() {
       <div className="card">
         <h3>Outlook Calendar</h3>
         <p style={{ color: 'var(--text-muted)' }}>
-          Sync commitments from Microsoft Outlook Calendar (mock today; real Graph sync once Entra token is connected).
+          Sync commitments from your Microsoft Outlook Calendar.
         </p>
         <button type="button" className="btn" onClick={syncOutlook} disabled={syncing || !userId}>
           {syncing ? 'Syncing…' : 'Sync Outlook Calendar'}

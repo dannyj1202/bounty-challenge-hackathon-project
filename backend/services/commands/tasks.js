@@ -51,13 +51,19 @@ export async function run({ userId, messages, context, args }) {
       ).get(id);
       inserted.push(row);
     }
-    const reply = [
-      `Created ${inserted.length} task suggestion(s).`,
-      '',
-      'To accept: POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }',
-      'To reject: POST /api/copilot/suggestions/:id/reject with body { "userId": "<your userId>" }',
-    ].join('\n');
-    return { reply, suggestions: inserted };
+  const steps = inserted.map((s) => {
+    let p = {};
+    try {
+      p = s.payload ? JSON.parse(s.payload) : {};
+    } catch {}
+    return { title: p.title || s.label, estMinutes: 30, checklist: ['Review', 'Complete'] };
+  });
+  const reply = [
+    `Created ${inserted.length} task suggestion(s).`,
+    '',
+    'To accept: use Accept on each suggestion in the UI, or POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }',
+  ].join('\n');
+    return { reply, suggestions: inserted, structured: { steps }, citations: [] };
   }
 
   // No quoted task: use upcoming assignments or generic
@@ -105,11 +111,17 @@ export async function run({ userId, messages, context, args }) {
   const summary = assignments.length > 0
     ? `Suggested ${inserted.length} tasks from your upcoming assignments.`
     : `Suggested ${inserted.length} generic tasks (no upcoming assignments).`;
+  const steps = inserted.map((s) => {
+    let p = {};
+    try {
+      p = s.payload ? JSON.parse(s.payload) : {};
+    } catch {}
+    return { title: p.title || s.label, estMinutes: 30, checklist: ['Review', 'Complete'] };
+  });
   const reply = [
     summary,
     '',
-    'To accept: POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }',
-    'To reject: POST /api/copilot/suggestions/:id/reject with body { "userId": "<your userId>" }',
+    'To accept: use Accept on each suggestion in the UI.',
   ].join('\n');
-  return { reply, suggestions: inserted };
+  return { reply, suggestions: inserted, structured: { steps }, citations: [] };
 }

@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { getDb } from '../db/index.js';
-import { extractTextFromBuffer, isAvailable } from '../services/documentIntelligenceService/index.js';
+import { extractTextFromBuffer, isAvailable } from '../services/documentIntelligenceClient.js';
 
 const router = Router();
 

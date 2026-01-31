@@ -120,14 +120,7 @@ const CHEATING_PHRASES = [
   'do my essay',
 ];
 
-const REFUSAL_REPLY = [
-  "I can't do the assignment for you. I'm here to support your learning, not to do the work for you.",
-  '',
-  'Try instead:',
-  '- /check — get feedback on your attempt',
-  '- /plan — study plan suggestions',
-  '- /tasks — task breakdown',
-].join('\n');
+const REFUSAL_REPLY = "I can't generate solutions or full submissions. Try /tasks or /check.";
 
 function looksLikeCheatingIntent(text) {
   if (!text || typeof text !== 'string') return false;
@@ -141,12 +134,12 @@ export async function execute({ userId, messages, context } = {}) {
 
   // Safe fallback (route already gates)
   if (!raw.startsWith('/')) {
-    return { reply: 'Use a command like /help', suggestions: [] };
+    return { reply: 'Use a command like /help', suggestions: [], structured: null, citations: [] };
   }
 
   // Global no-cheating guard: refuse clear "do my work" intent before any dispatch
   if (looksLikeCheatingIntent(raw)) {
-    return { reply: REFUSAL_REPLY, suggestions: [] };
+    return { reply: REFUSAL_REPLY, suggestions: [], structured: null, citations: [] };
   }
 
   const afterSlash = raw.slice(1).trim();
@@ -154,14 +147,14 @@ export async function execute({ userId, messages, context } = {}) {
   const cmd = (cmdRaw || '').toLowerCase();
   const args = rest.join(' ').trim();
 
-  if (!cmd) return { reply: 'Type a command after "/". Try /help', suggestions: [] };
+  if (!cmd) return { reply: 'Type a command after "/". Try /help', suggestions: [], structured: null, citations: [] };
 
-  if (CHEATING_COMMANDS.has(cmd)) return { reply: REFUSAL_REPLY, suggestions: [] };
+  if (CHEATING_COMMANDS.has(cmd)) return { reply: REFUSAL_REPLY, suggestions: [], structured: null, citations: [] };
 
   // Unknown command: if message looks like cheating intent, refuse; else help
   if (!ALLOWED.has(cmd)) {
-    if (looksLikeCheatingIntent(raw)) return { reply: REFUSAL_REPLY, suggestions: [] };
-    return { reply: 'Unknown command. Try /help', suggestions: [] };
+    if (looksLikeCheatingIntent(raw)) return { reply: REFUSAL_REPLY, suggestions: [], structured: null, citations: [] };
+    return { reply: 'Unknown command. Try /help', suggestions: [], structured: null, citations: [] };
   }
 
   if (cmd === 'help') return runHelp({ userId, messages, context, args });
@@ -178,5 +171,7 @@ export async function execute({ userId, messages, context } = {}) {
   return {
     reply: `/${cmd} is recognized but not implemented yet. Try /help.`,
     suggestions: [],
+    structured: null,
+    citations: [],
   };
 }

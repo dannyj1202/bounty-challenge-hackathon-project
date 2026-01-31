@@ -157,3 +157,22 @@ export const docs = {
     return api('POST', '/docs/ingest', form);
   },
 };
+
+/** Documents: upload (chunk+embed+index), text, search. */
+export const documents = {
+  upload: async (userId, files, title = '') => {
+    const form = new FormData();
+    form.append('userId', userId);
+    if (Array.isArray(files)) {
+      files.forEach((f) => form.append('files', f));
+    } else {
+      form.append('file', files);
+    }
+    if (title) form.append('title', title);
+    return api('POST', '/documents/upload', form);
+  },
+  text: (userId, text, title = '') =>
+    api('POST', '/documents/text', { userId, text, title: title || 'Pasted text' }),
+  search: (q, top = 5) =>
+    api('GET', `/documents/search?q=${encodeURIComponent(q)}&top=${top}`),
+};

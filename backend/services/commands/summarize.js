@@ -1,10 +1,13 @@
 /**
- * /summarize — deterministic bullet summary, key terms, next steps. Read-only, no AI.
- * /summarize <text> | /summarize (uses last 1–3 notes)
+ * /summarize — summary, keyPoints[], definitions[], nextSteps[], citations[].
+ * Uses RAG when useRag; GPT-4o when Azure OpenAI configured; else deterministic fallback.
  */
 
 import { getDb } from '../../db/index.js';
+import { getRagContext } from '../ragService.js';
+import { chatCompletion, isConfigured as openAiConfigured } from '../azureOpenAIClient.js';
 
+const INPUT_CAP = 12000;
 const STOPWORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from',
   'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
@@ -31,94 +34,119 @@ function tokenize(text) {
     .filter(Boolean);
 }
 
-const INPUT_CAP = 12000;
-
-/** True if input looks like a short topic phrase (no sentence boundaries), not long text to summarize. */
-function looksLikeTopicPhrase(text) {
-  const t = String(text || '').trim();
-  if (t.length > 500) return false;
-  const hasSentenceEnd = /[.!?]\s/.test(t) || /[.!?]$/.test(t);
-  return !hasSentenceEnd;
-}
-
 function simpleSummarize(text) {
   const t = String(text || '').trim().slice(0, INPUT_CAP);
-  if (!t) return { bullets: [], terms: [], nextSteps: [], topicPhrase: false };
-  const topicPhrase = looksLikeTopicPhrase(t);
-  const sentences = t
-    .split(/[.!?]+/)
-    .map((s) => s.trim())
-    .filter((s) => s && !/^\[[^\]]+\]$/.test(s))
-    .slice(0, 15);
-  const bullets = sentences.slice(0, 5).map((s) => (s.length > 120 ? s.slice(0, 117) + '...' : s));
+  if (!t) return { summary: '', keyPoints: [], definitions: [], nextSteps: [] };
+  const sentences = t.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s && s.length > 10).slice(0, 15);
+  const keyPoints = sentences.slice(0, 5).map((s) => (s.length > 120 ? s.slice(0, 117) + '...' : s));
   const words = tokenize(t);
   const freq = {};
   words.forEach((w) => {
     if (w.length > 2 && !STOPWORDS.has(w)) freq[w] = (freq[w] || 0) + 1;
   });
-  const terms = Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([w]) => w);
+  const definitions = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
   const nextSteps = [
-    'Review the key terms above and test yourself.',
+    'Review the key points and test yourself.',
     'Connect this material to something you already know.',
-    'Practice explaining one bullet in your own words.',
+    'Practice explaining one point in your own words.',
   ];
-  return { bullets, terms, nextSteps, topicPhrase };
+  const summary = keyPoints.slice(0, 3).join(' ') || t.slice(0, 300);
+  return { summary, keyPoints, definitions, nextSteps };
 }
 
 export async function run({ userId, messages, context, args }) {
-  if (!userId) return { reply: 'userId required', suggestions: [] };
+  if (!userId) return { reply: 'userId required', suggestions: [], citations: [] };
 
   const db = getDb();
-  const tableExists = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'"
-  ).get();
-
-  // Prefer document source: noteId/text from payload, then args, then last 1–3 notes
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notes'").get();
   let text = (context?.documentText != null && context.documentText !== '')
     ? String(context.documentText).trim().slice(0, INPUT_CAP)
     : (args || '').trim();
+  if (!text && tableExists) text = getLastNotesContent(db, userId);
   if (!text) {
-    if (!tableExists) {
-      return {
-        reply: 'Usage: /summarize <text> — or add notes and run /summarize with no args to summarize your latest notes.',
-        suggestions: [],
-      };
-    }
-    text = getLastNotesContent(db, userId);
-    if (!text) {
-      return {
-        reply: 'Usage: /summarize <text> — or add notes and run /summarize with no args to summarize your latest notes.',
-        suggestions: [],
-      };
+    return {
+      reply: 'Usage: /summarize <text> — or add notes/upload a doc and run /summarize to summarize.',
+      suggestions: [],
+      structured: null,
+      citations: [],
+    };
+  }
+
+  const useRag = context?.useRag !== false;
+  const query = (context?.topic || text.slice(0, 200)).trim();
+  let rag = { contextText: text.slice(0, 8000), citations: [] };
+  if (useRag) {
+    try {
+      rag = await getRagContext({ query, documentText: text, useRag: true, topK: 5, userId });
+    } catch (e) {
+      console.warn('[summarize] RAG:', e.message);
     }
   }
-  const { bullets, terms, nextSteps, topicPhrase } = simpleSummarize(text);
-  let reply;
-  if (topicPhrase && bullets.length <= 1) {
-    reply = [
-      'You asked for a summary of a topic. The fallback summarizer only works on longer text (multiple sentences).',
-      'For a proper explanation, enable Azure OpenAI (USE_AZURE_OPENAI=true) or paste paragraph-length content to summarize.',
-      '',
-      'Key terms from your query:',
-      terms.length ? terms.join(', ') : '(none)',
-      '',
-      'Next steps:',
-      ...nextSteps.map((s) => `• ${s}`),
-    ].join('\n');
-  } else {
-    reply = [
-      'Summary (key points):',
-      ...(bullets.length ? bullets.map((b) => `• ${b}`) : ['(none extracted)']),
-      '',
-      'Key terms:',
-      terms.length ? terms.join(', ') : '(none)',
-      '',
-      'Next steps:',
-      ...nextSteps.map((s) => `• ${s}`),
-    ].join('\n');
+
+  if (openAiConfigured() && rag.contextText) {
+    try {
+      const system = `You are a study assistant. Summarize the following content. Return valid JSON only with keys: summary (string), keyPoints (array of strings), definitions (array of key terms), nextSteps (array of strings). No other text.`;
+      const userContent = `Content:\n${rag.contextText.slice(0, 6000)}\n\nProvide the JSON summary.`;
+      const { content } = await chatCompletion({
+        system,
+        messages: [{ role: 'user', content: userContent }],
+        temperature: 0.3,
+        maxTokens: 800,
+        responseFormat: { type: 'json_object' },
+      });
+      let parsed = {};
+      try {
+        parsed = JSON.parse(content || '{}');
+      } catch {
+        parsed = { summary: content || '', keyPoints: [], definitions: [], nextSteps: [] };
+      }
+      const summary = parsed.summary ?? '';
+      const keyPoints = Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [];
+      const definitions = Array.isArray(parsed.definitions) ? parsed.definitions : [];
+      const nextSteps = Array.isArray(parsed.nextSteps) ? parsed.nextSteps : [];
+      const reply = [
+        'Summary:',
+        summary,
+        '',
+        'Key points:',
+        ...keyPoints.map((p) => `• ${p}`),
+        '',
+        'Key terms:',
+        definitions.length ? definitions.join(', ') : '(none)',
+        '',
+        'Next steps:',
+        ...nextSteps.map((s) => `• ${s}`),
+      ].join('\n');
+      const citations = rag.citations.map((c) => ({ id: c.id, content: c.content?.slice(0, 200), score: c.score }));
+      return {
+        reply,
+        suggestions: [],
+        structured: { summary, keyPoints, definitions, nextSteps },
+        citations,
+      };
+    } catch (e) {
+      console.warn('[summarize] OpenAI:', e.message);
+    }
   }
-  return { reply, suggestions: [] };
+
+  const { summary, keyPoints, definitions, nextSteps } = simpleSummarize(text);
+  const reply = [
+    'Summary:',
+    summary,
+    '',
+    'Key points:',
+    ...keyPoints.map((b) => `• ${b}`),
+    '',
+    'Key terms:',
+    definitions.length ? definitions.join(', ') : '(none)',
+    '',
+    'Next steps:',
+    ...nextSteps.map((s) => `• ${s}`),
+  ].join('\n');
+  return {
+    reply,
+    suggestions: [],
+    structured: { summary, keyPoints, definitions, nextSteps },
+    citations: rag.citations.map((c) => ({ id: c.id, content: c.content?.slice(0, 200), score: c.score })),
+  };
 }

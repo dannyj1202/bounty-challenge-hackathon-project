@@ -164,12 +164,15 @@ export async function run({ userId, messages, context, args }) {
     inserted.push(row);
   }
 
+  const blocks = inserted.map((s) => {
+    let p = {};
+    try {
+      p = s.payload ? JSON.parse(s.payload) : {};
+    } catch {}
+    return { title: p.title, start: p.start, end: p.end };
+  });
   const reply = [
-    `Suggested ${inserted.length} study block(s) for the next 7 days (no overlap with your events).`,
-    '',
-    'To add a block to your calendar, use the accept endpoint with the suggestion id:',
-    'POST /api/copilot/suggestions/:id/accept with body { "userId": "<your userId>" }.',
+    `Suggested ${inserted.length} study block(s) for the next 7 days (no overlap with your events). Use Accept in the UI to add them.`,
   ].join('\n');
-
-  return { reply, suggestions: inserted };
+  return { reply, suggestions: inserted, structured: { blocks }, citations: [] };
 }

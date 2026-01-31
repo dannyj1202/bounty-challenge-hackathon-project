@@ -86,6 +86,11 @@ router.post("/sync", async (req, res) => {
 
     const accessToken = getStoredAccessToken(userId);
     const provider = accessToken ? "outlook" : "mock-outlook";
+    const useGraph = process.env.USE_MS_GRAPH === "true";
+    console.log("[calendar/sync] userId=" + userId + " hasToken=" + !!accessToken + " USE_MS_GRAPH=" + useGraph + " -> source=" + (accessToken ? "outlook" : "mock"));
+    if (useGraph && !accessToken) {
+      console.warn("[calendar/sync] No Microsoft token for userId=" + userId + ". Token is stored per user—reconnect from Settings (Connect Microsoft) while logged in as this account, or sign in with Microsoft from the login page.");
+    }
 
     const graphEvents = await getCalendarEvents({
       userId,
@@ -114,12 +119,24 @@ router.post("/sync", async (req, res) => {
 
     normalized.forEach((evt) => upsertLocalEventById(db, evt));
 
+    if (accessToken) {
+      console.log("[calendar/sync] Outlook sync complete: " + normalized.length + " events (range " + start + " to " + end + ")");
+    }
+
     res.json({
       source: accessToken ? "outlook" : "mock",
       events: normalized,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.warn("[calendar/sync] error:", e.message);
+    const msg = e.message || "Calendar sync failed";
+    const hasToken = !!getStoredAccessToken(userId);
+    const hint = !hasToken
+      ? " No Microsoft token for this user. Go to Settings and click Connect Microsoft (while logged in as this account), or sign out and sign in with Microsoft from the login page."
+      : /401|403|permission/i.test(String(msg))
+        ? " Token may be expired or missing Calendars.Read. Reconnect Microsoft or add Calendars.Read to GRAPH_SCOPES."
+        : "";
+    res.status(500).json({ error: msg + hint, noToken: !hasToken });
   }
 });
 

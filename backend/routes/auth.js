@@ -87,14 +87,23 @@ router.get('/entra/callback', async (req, res) => {
       const user = getOrCreateUserByEmail(db, email, 'student');
       if (!user) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=create_failed');
       msGraph.storeTokensForUser(user.id, tokenResponse);
+      console.log('[auth] Stored Microsoft token for userId=', user.id, 'email=', user.email);
       const token = 'mock-token-' + user.id;
       const params = new URLSearchParams({ ms: 'callback', token, userId: user.id, email: user.email, role: user.role });
       return res.redirect(FRONTEND_ORIGIN + '/login?' + params.toString());
     }
     await msGraph.exchangeCodeForTokens(String(code), String(state));
+    console.log('[auth] Stored Microsoft token for userId=', state);
     res.redirect(FRONTEND_ORIGIN + '/settings?ms=connected');
   } catch (e) {
-    console.error('entra callback error:', e);
+    const errCode = e.errorCode || e.code || '';
+    const errMsg = e.message || String(e);
+    console.error('[auth/entra/callback]', {
+      errorCode: errCode,
+      message: errMsg,
+      state: state ? '(present)' : '(missing)',
+      codePresent: !!code,
+    });
     res.status(500).send('Microsoft login failed');
   }
 });
@@ -103,6 +112,7 @@ router.get('/entra/callback', async (req, res) => {
 router.get('/microsoft/login', async (req, res) => {
   const userId = req.query.userId || req.query.state || '';
   const state = userId || SIGNUP_STATE;
+  console.log('[auth] Microsoft login redirect state=', state === SIGNUP_STATE ? 'signup (first-time)' : state, '| query.userId=', req.query.userId || '(none)');
 
   try {
     const url = await msGraph.getAuthorizeUrl(String(state));
@@ -127,14 +137,23 @@ router.get('/microsoft/callback', async (req, res) => {
       const user = getOrCreateUserByEmail(db, email, 'student');
       if (!user) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=create_failed');
       msGraph.storeTokensForUser(user.id, tokenResponse);
+      console.log('[auth] Stored Microsoft token for userId=', user.id, 'email=', user.email);
       const token = 'mock-token-' + user.id;
       const params = new URLSearchParams({ ms: 'callback', token, userId: user.id, email: user.email, role: user.role });
       return res.redirect(FRONTEND_ORIGIN + '/login?' + params.toString());
     }
     await msGraph.exchangeCodeForTokens(String(code), String(state));
+    console.log('[auth] Stored Microsoft token for userId=', state);
     res.redirect(FRONTEND_ORIGIN + '/settings?ms=connected');
   } catch (e) {
-    console.error('microsoft callback error:', e);
+    const errCode = e.errorCode || e.code || '';
+    const errMsg = e.message || String(e);
+    console.error('[auth/microsoft/callback]', {
+      errorCode: errCode,
+      message: errMsg,
+      state: state ? '(present)' : '(missing)',
+      codePresent: !!code,
+    });
     res.status(500).send('Microsoft login failed');
   }
 });

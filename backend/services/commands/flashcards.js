@@ -1,11 +1,14 @@
 /**
- * /flashcards — deterministic Q/A from text (read-only, no AI). Max 6 cards.
- * /flashcards <text> | /flashcards (uses last note)
+ * /flashcards — cards[{q,a}], citations[].
+ * Uses RAG when useRag; GPT-4o when configured; else deterministic fallback.
  */
 
 import { getDb } from '../../db/index.js';
+import { getRagContext } from '../ragService.js';
+import { chatCompletion, isConfigured as openAiConfigured } from '../azureOpenAIClient.js';
 
 const MAX_CARDS = 6;
+const DOCUMENT_CAP = 30000;
 
 function getLastNoteContent(db, userId) {
   try {
@@ -18,17 +21,13 @@ function getLastNoteContent(db, userId) {
   }
 }
 
-function buildCards(text) {
+function buildCardsFallback(text) {
   const t = String(text || '').trim();
   if (!t) return [];
   const byPunct = t.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s.length > 15);
-  const byNewline = t.split(/\n+/).map((p) => p.trim()).filter((p) => p.length > 15);
   const seen = new Set();
   const chunks = [];
   for (const x of byPunct) {
-    if (!seen.has(x)) { seen.add(x); chunks.push(x); }
-  }
-  for (const x of byNewline) {
     if (!seen.has(x)) { seen.add(x); chunks.push(x); }
   }
   const cards = [];
@@ -39,50 +38,82 @@ function buildCards(text) {
     const a = s.length > maxA ? s.slice(0, maxA) + '...' : s;
     cards.push({ q, a });
   }
-  if (cards.length < 2 && t.length > 50) {
-    const parts = t.split(/\n+/).map((p) => p.trim()).filter(Boolean);
-    for (let i = 0; i < Math.min(MAX_CARDS - cards.length, parts.length); i++) {
-      if (parts[i].length > 20) cards.push({ q: `Summarize: "${parts[i].slice(0, 60)}..."`, a: parts[i].length > maxA ? parts[i].slice(0, maxA) + '...' : parts[i] });
-    }
-  }
   return cards.slice(0, MAX_CARDS);
 }
 
-const DOCUMENT_CAP = 30000;
-
 export async function run({ userId, messages, context, args }) {
-  if (!userId) return { reply: 'userId required', suggestions: [] };
+  if (!userId) return { reply: 'userId required', suggestions: [], citations: [] };
 
   const db = getDb();
-  const tableExists = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'"
-  ).get();
-  if (!tableExists) {
-    return {
-      reply: 'Usage: /flashcards <text> — or add notes via the Notes page, then run /flashcards with no args to use your latest note.',
-      suggestions: [],
-    };
-  }
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notes'").get();
   let text = (context?.documentText != null && context.documentText !== '')
     ? String(context.documentText).trim().slice(0, DOCUMENT_CAP)
     : (args || '').trim();
+  if (!text && tableExists) text = getLastNoteContent(db, userId);
   if (!text) {
-    text = getLastNoteContent(db, userId);
-    if (!text) {
-      return {
-        reply: 'Usage: /flashcards <text> — or add a note and run /flashcards with no args to use your latest note.',
-        suggestions: [],
-      };
-    }
-  }
-  const cards = buildCards(text);
-  if (cards.length === 0) {
     return {
-      reply: 'Not enough content to build flashcards. Provide longer text or use /flashcards <your text>.',
+      reply: 'Usage: /flashcards <text> — or add a note/upload a doc and run /flashcards.',
       suggestions: [],
+      structured: null,
+      citations: [],
     };
   }
-  const lines = cards.flatMap((c, i) => [`Q${i + 1}: ${c.q}`, `A${i + 1}: ${c.a}`]);
-  const reply = ['Flashcards:', '', ...lines].join('\n');
-  return { reply, suggestions: [] };
+
+  const useRag = context?.useRag !== false;
+  const query = (context?.topic || text.slice(0, 200)).trim();
+  let rag = { contextText: text.slice(0, 8000), citations: [] };
+  if (useRag) {
+    try {
+      rag = await getRagContext({ query, documentText: text, useRag: true, topK: 5, userId });
+    } catch (e) {
+      console.warn('[flashcards] RAG:', e.message);
+    }
+  }
+
+  if (openAiConfigured() && rag.contextText) {
+    try {
+      const system = `You are a study assistant. Generate up to ${MAX_CARDS} flashcards from the content. Return valid JSON only with key "cards" (array of objects with "q" and "a" strings). No other text.`;
+      const userContent = `Content:\n${rag.contextText.slice(0, 6000)}\n\nProvide the JSON with cards array.`;
+      const { content } = await chatCompletion({
+        system,
+        messages: [{ role: 'user', content: userContent }],
+        temperature: 0.4,
+        maxTokens: 600,
+        responseFormat: { type: 'json_object' },
+      });
+      let parsed = { cards: [] };
+      try {
+        parsed = JSON.parse(content || '{}');
+      } catch {}
+      const cards = Array.isArray(parsed.cards) ? parsed.cards.slice(0, MAX_CARDS) : [];
+      const valid = cards.filter((c) => c && typeof c.q === 'string' && typeof c.a === 'string');
+      const reply = valid.flatMap((c, i) => [`Q${i + 1}: ${c.q}`, `A${i + 1}: ${c.a}`]).join('\n\n');
+      const citations = rag.citations.map((c) => ({ id: c.id, content: c.content?.slice(0, 200), score: c.score }));
+      return {
+        reply: reply || 'No flashcards generated. Try longer content.',
+        suggestions: [],
+        structured: { cards: valid },
+        citations,
+      };
+    } catch (e) {
+      console.warn('[flashcards] OpenAI:', e.message);
+    }
+  }
+
+  const cards = buildCardsFallback(text);
+  if (cards.length === 0) {
+    return {
+      reply: 'Not enough content to build flashcards. Provide longer text or upload a doc.',
+      suggestions: [],
+      structured: { cards: [] },
+      citations: [],
+    };
+  }
+  const reply = cards.flatMap((c, i) => [`Q${i + 1}: ${c.q}`, `A${i + 1}: ${c.a}`]).join('\n\n');
+  return {
+    reply,
+    suggestions: [],
+    structured: { cards },
+    citations: rag.citations.map((c) => ({ id: c.id, content: c.content?.slice(0, 200), score: c.score })),
+  };
 }
