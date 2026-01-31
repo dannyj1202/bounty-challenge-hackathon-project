@@ -3,12 +3,14 @@
  */
 
 export async function generateChatCompletion({ system, messages } = {}) {
+  console.log('[copilot] response via provider=fallback (mock)');
   const last = messages?.filter((m) => m.role === 'user').pop();
   const content = last?.content ? String(last.content).slice(0, 200) : 'Hello';
   return { content: `[Mock] I understand: "${content}...". Set USE_AZURE_OPENAI=true for real AI.` };
 }
 
 export async function* streamChatCompletion({ system, messages } = {}) {
+  console.log('[copilot] response via provider=fallback (mock)');
   const last = messages?.filter((m) => m.role === 'user').pop();
   const content = last?.content ? String(last.content).slice(0, 200) : 'Hello';
   const text = `[Mock] I understand: "${content}...". Set USE_AZURE_OPENAI=true for real AI.`;

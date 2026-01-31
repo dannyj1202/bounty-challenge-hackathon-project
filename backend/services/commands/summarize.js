@@ -33,9 +33,18 @@ function tokenize(text) {
 
 const INPUT_CAP = 12000;
 
+/** True if input looks like a short topic phrase (no sentence boundaries), not long text to summarize. */
+function looksLikeTopicPhrase(text) {
+  const t = String(text || '').trim();
+  if (t.length > 500) return false;
+  const hasSentenceEnd = /[.!?]\s/.test(t) || /[.!?]$/.test(t);
+  return !hasSentenceEnd;
+}
+
 function simpleSummarize(text) {
   const t = String(text || '').trim().slice(0, INPUT_CAP);
-  if (!t) return { bullets: [], terms: [], nextSteps: [] };
+  if (!t) return { bullets: [], terms: [], nextSteps: [], topicPhrase: false };
+  const topicPhrase = looksLikeTopicPhrase(t);
   const sentences = t
     .split(/[.!?]+/)
     .map((s) => s.trim())
@@ -56,7 +65,7 @@ function simpleSummarize(text) {
     'Connect this material to something you already know.',
     'Practice explaining one bullet in your own words.',
   ];
-  return { bullets, terms, nextSteps };
+  return { bullets, terms, nextSteps, topicPhrase };
 }
 
 export async function run({ userId, messages, context, args }) {
@@ -86,16 +95,30 @@ export async function run({ userId, messages, context, args }) {
       };
     }
   }
-  const { bullets, terms, nextSteps } = simpleSummarize(text);
-  const reply = [
-    'Summary (key points):',
-    ...(bullets.length ? bullets.map((b) => `• ${b}`) : ['(none extracted)']),
-    '',
-    'Key terms:',
-    terms.length ? terms.join(', ') : '(none)',
-    '',
-    'Next steps:',
-    ...nextSteps.map((s) => `• ${s}`),
-  ].join('\n');
+  const { bullets, terms, nextSteps, topicPhrase } = simpleSummarize(text);
+  let reply;
+  if (topicPhrase && bullets.length <= 1) {
+    reply = [
+      'You asked for a summary of a topic. The fallback summarizer only works on longer text (multiple sentences).',
+      'For a proper explanation, enable Azure OpenAI (USE_AZURE_OPENAI=true) or paste paragraph-length content to summarize.',
+      '',
+      'Key terms from your query:',
+      terms.length ? terms.join(', ') : '(none)',
+      '',
+      'Next steps:',
+      ...nextSteps.map((s) => `• ${s}`),
+    ].join('\n');
+  } else {
+    reply = [
+      'Summary (key points):',
+      ...(bullets.length ? bullets.map((b) => `• ${b}`) : ['(none extracted)']),
+      '',
+      'Key terms:',
+      terms.length ? terms.join(', ') : '(none)',
+      '',
+      'Next steps:',
+      ...nextSteps.map((s) => `• ${s}`),
+    ].join('\n');
+  }
   return { reply, suggestions: [] };
 }

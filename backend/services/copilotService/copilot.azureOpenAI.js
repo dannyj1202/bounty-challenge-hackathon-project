@@ -17,6 +17,8 @@ function getConfig() {
 /** Non-streaming completion with timeout. */
 export async function generateChatCompletion({ system, messages, temperature = 0.7, maxTokens = 800 } = {}) {
   const { endpoint, key, deployment, apiVersion } = getConfig();
+  // Temporary debug: confirm Azure OpenAI path is used (do not log secrets)
+  console.log('[copilot] response via provider=azure-openai, deployment=' + deployment);
   const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
   const body = {
     messages: system ? [{ role: 'system', content: system }, ...messages] : messages,
@@ -47,6 +49,8 @@ export async function generateChatCompletion({ system, messages, temperature = 0
 /** Stream completion: async iterable of text deltas. Timeout applies to initial response. */
 export async function* streamChatCompletion({ system, messages, temperature = 0.7, maxTokens = 800 } = {}) {
   const { endpoint, key, deployment, apiVersion } = getConfig();
+  // Temporary debug: confirm Azure OpenAI path is used (do not log secrets)
+  console.log('[copilot] response via provider=azure-openai, deployment=' + deployment);
   const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
   const body = {
     messages: system ? [{ role: 'system', content: system }, ...messages] : messages,

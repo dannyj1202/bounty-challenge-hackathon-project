@@ -80,7 +80,11 @@ router.post('/chat/stream', async (req, res) => {
     const result = await executeCopilotCommand({ userId, messages, context });
     const { reply: fallbackReply, suggestions = [] } = result;
 
-    const system = `You are a study assistant. User context:\n${contextSummary}\nReply briefly and helpfully to the user's command. Do not repeat the command.`;
+    const isSummarize = /^\/summarize(\s|$)/i.test(raw);
+    const systemBase = `You are a study assistant. User context:\n${contextSummary}\n`;
+    const system = isSummarize
+      ? systemBase + 'The user asked for a summary. Provide a concise summary with: 1) Key points (bullets), 2) Key terms, 3) Suggested next steps for studying. Do not repeat the command. Be informative.'
+      : systemBase + 'Reply briefly and helpfully to the user\'s command. Do not repeat the command.';
     const streamMessages = [{ role: 'user', content: raw }];
 
     let streamed = false;
