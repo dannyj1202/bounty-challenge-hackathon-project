@@ -1,7 +1,104 @@
 /**
- * Azure OpenAI Copilot service - real REST calls.
+ * Azure OpenAI Copilot service - real REST calls + streaming.
  * Requires: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT, AZURE_OPENAI_API_VERSION
  */
+
+const DEFAULT_TIMEOUT_MS = 12000;
+
+function getConfig() {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const key = process.env.AZURE_OPENAI_API_KEY;
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4';
+  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview';
+  if (!endpoint || !key) throw new Error('Azure OpenAI: AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY required');
+  return { endpoint: endpoint.replace(/\/$/, ''), key, deployment, apiVersion };
+}
+
+/** Non-streaming completion with timeout. */
+export async function generateChatCompletion({ system, messages, temperature = 0.7, maxTokens = 800 } = {}) {
+  const { endpoint, key, deployment, apiVersion } = getConfig();
+  const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+  const body = {
+    messages: system ? [{ role: 'system', content: system }, ...messages] : messages,
+    max_tokens: maxTokens,
+    temperature,
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': key },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Azure OpenAI: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    return { content };
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+}
+
+/** Stream completion: async iterable of text deltas. Timeout applies to initial response. */
+export async function* streamChatCompletion({ system, messages, temperature = 0.7, maxTokens = 800 } = {}) {
+  const { endpoint, key, deployment, apiVersion } = getConfig();
+  const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+  const body = {
+    messages: system ? [{ role: 'system', content: system }, ...messages] : messages,
+    max_tokens: maxTokens,
+    temperature,
+    stream: true,
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': key },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+
+  if (!res.ok) throw new Error(`Azure OpenAI: ${res.status} ${await res.text()}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) yield delta;
+          } catch {}
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 export async function chat({ messages, context = {} }) {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;

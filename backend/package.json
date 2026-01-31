@@ -10,10 +10,12 @@
     "db:init": "node db/init.js"
   },
   "dependencies": {
+    "@azure/ai-form-recognizer": "^5.1.0",
     "@azure/msal-node": "^5.0.3",
     "better-sqlite3": "^11.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "multer": "^2.0.2"
   }
 }

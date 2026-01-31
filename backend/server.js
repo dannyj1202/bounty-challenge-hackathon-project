@@ -20,6 +20,7 @@ import webhooksRoutes from './routes/webhooks.js';
 import devRoutes from './routes/dev.js';
 import communityRoutes from './routes/community.js';
 import calendarRoutes from './routes/calendar.js';
+import docsRoutes from './routes/docs.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -62,6 +63,7 @@ app.use('/api/insights', insightsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/docs', docsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

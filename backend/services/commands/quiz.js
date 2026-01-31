@@ -10,8 +10,13 @@ import * as copilot from '../copilotService/index.js';
  *  /quiz Binary Search Trees
  *  /quiz Operating Systems scheduling
  */
+const QUIZ_DOCUMENT_CAP = 8000;
+
 export async function run({ userId, messages, context, args }) {
-  const text = (args || '').trim() || 'General study topic';
+  // Use document (noteId/text) as topic when provided; else command args
+  const text = (context?.documentText != null && context.documentText !== '')
+    ? String(context.documentText).trim().slice(0, QUIZ_DOCUMENT_CAP)
+    : (args || '').trim() || 'General study topic';
   const db = getDb();
 
   // Decide a simple difficulty hint (string) for your existing generateQuiz

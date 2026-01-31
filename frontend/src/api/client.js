@@ -70,6 +70,54 @@ export const plan = {
 };
 export const copilot = {
   chat: (body) => api('POST', '/copilot/chat', body),
+  /**
+   * Stream: POST /copilot/chat/stream, yields { type: 'chunk', text } | { type: 'suggestions', suggestions } | { type: 'done' } | { type: 'error', message }.
+   */
+  async *chatStream(body) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/copilot/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      yield { type: 'error', message: data?.error || res.statusText };
+      yield { type: 'done' };
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const obj = JSON.parse(line.slice(6));
+              yield obj;
+              if (obj.type === 'done') return;
+            } catch {}
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    yield { type: 'done' };
+  },
+  suggestionsList: (userId, status = 'pending') =>
+    api('GET', `/copilot/suggestions?userId=${encodeURIComponent(userId)}&status=${status}`),
+  acceptSuggestion: (id, userId) => api('POST', `/copilot/suggestions/${id}/accept`, { userId }),
+  rejectSuggestion: (id, userId) => api('POST', `/copilot/suggestions/${id}/reject`, { userId }),
 };
 export const quiz = {
   generate: (body) => api('POST', '/quiz/generate', body),
@@ -97,4 +145,15 @@ export const insights = {
 };
 export const dev = {
   seed: () => api('POST', '/dev/seed'),
+};
+
+/** Document ingestion: upload file → DI extract → stored as note. Returns { ok, noteId, title, chars }. */
+export const docs = {
+  ingest: async (userId, file, title = '') => {
+    const form = new FormData();
+    form.append('userId', userId);
+    form.append('file', file);
+    if (title) form.append('title', title);
+    return api('POST', '/docs/ingest', form);
+  },
 };

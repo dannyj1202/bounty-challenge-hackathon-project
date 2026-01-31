@@ -2,6 +2,19 @@
  * Mock Copilot service - returns canned responses for demo without Azure OpenAI.
  */
 
+export async function generateChatCompletion({ system, messages } = {}) {
+  const last = messages?.filter((m) => m.role === 'user').pop();
+  const content = last?.content ? String(last.content).slice(0, 200) : 'Hello';
+  return { content: `[Mock] I understand: "${content}...". Set USE_AZURE_OPENAI=true for real AI.` };
+}
+
+export async function* streamChatCompletion({ system, messages } = {}) {
+  const last = messages?.filter((m) => m.role === 'user').pop();
+  const content = last?.content ? String(last.content).slice(0, 200) : 'Hello';
+  const text = `[Mock] I understand: "${content}...". Set USE_AZURE_OPENAI=true for real AI.`;
+  for (const chunk of text.split(/(?<= )/)) yield chunk;
+}
+
 export async function chat({ messages, context = {} }) {
   const lastUser = messages.filter(m => m.role === 'user').pop();
   const query = lastUser?.content || 'Hello';

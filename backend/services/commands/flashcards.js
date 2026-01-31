@@ -48,6 +48,8 @@ function buildCards(text) {
   return cards.slice(0, MAX_CARDS);
 }
 
+const DOCUMENT_CAP = 30000;
+
 export async function run({ userId, messages, context, args }) {
   if (!userId) return { reply: 'userId required', suggestions: [] };
 
@@ -61,7 +63,9 @@ export async function run({ userId, messages, context, args }) {
       suggestions: [],
     };
   }
-  let text = (args || '').trim();
+  let text = (context?.documentText != null && context.documentText !== '')
+    ? String(context.documentText).trim().slice(0, DOCUMENT_CAP)
+    : (args || '').trim();
   if (!text) {
     text = getLastNoteContent(db, userId);
     if (!text) {

@@ -34,3 +34,5 @@ export const chat = mod.chat;
 export const generateStudyPlan = mod.generateStudyPlan;
 export const generateQuiz = mod.generateQuiz;
 export const getWeakTopicsAndSuggestions = mod.getWeakTopicsAndSuggestions;
+export const generateChatCompletion = mod.generateChatCompletion;
+export const streamChatCompletion = mod.streamChatCompletion;

@@ -67,7 +67,10 @@ export async function run({ userId, messages, context, args }) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'"
   ).get();
 
-  let text = (args || '').trim();
+  // Prefer document source: noteId/text from payload, then args, then last 1–3 notes
+  let text = (context?.documentText != null && context.documentText !== '')
+    ? String(context.documentText).trim().slice(0, INPUT_CAP)
+    : (args || '').trim();
   if (!text) {
     if (!tableExists) {
       return {
