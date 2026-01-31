@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { usePlan } from './context/PlanContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Home from './pages/Home';
@@ -10,12 +11,14 @@ import Notes from './pages/Notes';
 import Community from './pages/Community';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
+import Pricing from './pages/Pricing';
 
-
-function PrivateRoute({ children, adminOnly }) {
+function PrivateRoute({ children, adminOnly, requireInstitutionPlan }) {
   const { user, isAdmin } = useAuth();
+  const { canAccessInsights } = usePlan();
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/home" replace />;
+  if (requireInstitutionPlan && !canAccessInsights) return <Navigate to="/pricing" replace />;
   return children;
 }
 
@@ -29,7 +32,8 @@ export default function App() {
       <Route path="/quiz" element={<PrivateRoute><Layout><Quiz /></Layout></PrivateRoute>} />
       <Route path="/notes" element={<PrivateRoute><Layout><Notes /></Layout></PrivateRoute>} />
       <Route path="/community" element={<PrivateRoute><Layout><Community /></Layout></PrivateRoute>} />
-      <Route path="/insights" element={<PrivateRoute adminOnly><Layout><Insights /></Layout></PrivateRoute>} />
+      <Route path="/insights" element={<PrivateRoute adminOnly requireInstitutionPlan><Layout><Insights /></Layout></PrivateRoute>} />
+      <Route path="/pricing" element={<PrivateRoute><Layout><Pricing /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
     </Routes>
   );

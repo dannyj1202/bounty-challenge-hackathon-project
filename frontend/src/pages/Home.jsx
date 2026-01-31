@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../context/PlanContext';
 import { assignments, copilot, notifications, user } from '../api/client';
 
 const WIDGET_IDS = ['notifications', 'tasks', 'copilot'];
 
 export default function Home() {
   const { userId } = useAuth();
+  const { canUseCopilot, copilotRemaining, copilotLimit, incrementCopilotUsage, plan } = usePlan();
   const [widgets, setWidgets] = useState(WIDGET_IDS);
   const [tasks, setTasks] = useState([]);
   const [notifs, setNotifs] = useState([]);
@@ -33,6 +36,10 @@ export default function Home() {
 
   const sendMessage = async () => {
     if (!input.trim()) return;
+    if (!canUseCopilot) {
+      setError('Daily copilot limit reached. Upgrade to Elite for unlimited prompts.');
+      return;
+    }
     const userMsg = { role: 'user', content: input.trim() };
     setMessages((m) => [...m, userMsg]);
     setInput('');
@@ -40,6 +47,7 @@ export default function Home() {
     setError('');
     try {
       const res = await copilot.chat({ userId, messages: [...messages, userMsg] });
+      incrementCopilotUsage();
       setMessages((m) => [...m, { role: 'assistant', ...res }]);
     } catch (err) {
       setError(err.message);
@@ -108,6 +116,18 @@ export default function Home() {
         {centerCopilot && (
           <div className="card">
             <h3>Copilot</h3>
+            {plan === 'free' && (
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
+                {copilotRemaining !== null && (
+                  <>Daily prompts: {copilotRemaining} of {copilotLimit} left. Upgrade to Elite for unlimited.</>
+                )}
+              </p>
+            )}
+            {!canUseCopilot && (
+              <div className="copilot-limit-cta">
+                You&apos;ve used all {copilotLimit} copilot prompts for today. <Link to="/pricing">Upgrade to Elite</Link> for unlimited prompts.
+              </div>
+            )}
             <div style={{ marginBottom: 12 }}>
               {messages.map((m, i) => (
                 <div key={i} className={`copilot-message ${m.role}`}>
@@ -123,8 +143,8 @@ export default function Home() {
             </div>
             {error && <p className="error">{error}</p>}
             <div style={{ display: 'flex', gap: 8 }}>
-              <input type="text" className="form-group" style={{ flex: 1 }} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} placeholder="Ask the copilot…" />
-              <button type="button" className="btn" onClick={sendMessage} disabled={loading}>{loading ? '…' : 'Send'}</button>
+              <input type="text" className="form-group" style={{ flex: 1 }} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} placeholder="Ask the copilot…" disabled={!canUseCopilot} />
+              <button type="button" className="btn" onClick={sendMessage} disabled={loading || !canUseCopilot}>{loading ? '…' : 'Send'}</button>
             </div>
           </div>
         )}
