@@ -1,7 +1,6 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '.env') });
 
 import express from 'express';
 import cors from 'cors';

@@ -31,8 +31,13 @@ export async function api(method, path, body = null) {
   return data;
 }
 
+const BACKEND_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://localhost:3001';
+
 export const auth = {
   mockLogin: (email, role) => api('POST', '/auth/mock-login', { email, role }),
+  /** Build Microsoft login URL (use query param; pass string userId from useAuth().userId). */
+  getMicrosoftLoginUrl: (userId) =>
+    `${BACKEND_ORIGIN}/api/auth/microsoft/login?userId=${encodeURIComponent(String(userId))}`,
 };
 export const user = {
   getPreferences: (userId) => api('GET', `/user/preferences?userId=${encodeURIComponent(userId)}`),

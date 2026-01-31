@@ -134,6 +134,21 @@ export function initDb() {
       createdAt TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS oauth_accounts (
+      userId TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      homeAccountId TEXT,
+      tenantId TEXT,
+      username TEXT,
+      scopes TEXT,
+      accessToken TEXT,
+      expiresAt INTEGER,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      PRIMARY KEY (userId, provider),
+      FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(userId, startAt);
     CREATE INDEX IF NOT EXISTS idx_events_user_end ON events(userId, endAt);
 
@@ -144,6 +159,12 @@ export function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_assignments_user_due_completed
       ON assignments(userId, dueDate, completed);
+    
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_events_user_sourceId
+    ON events(userId, sourceId)
+    WHERE sourceId IS NOT NULL;
+
+
   `);
 
   db.close();

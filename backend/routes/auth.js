@@ -44,23 +44,73 @@ router.post('/mock-login', (req, res) => {
 });
 
 
-// GET /api/auth/entra/login - redirect to Entra ID (OAuth)
-router.get('/entra/login', (req, res) => {
-  const state = req.query.state || req.query.redirect_uri || '';
+// GET /api/auth/entra/login?userId=...  - redirect to Entra ID (OAuth)
+router.get('/entra/login', async (req, res) => {
+  const userId = req.query.userId || req.query.state || '';
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
   try {
-    const url = msGraph.getAuthorizeUrl(state);
+    const url = await msGraph.getAuthorizeUrl(String(userId));
     res.redirect(url);
   } catch (e) {
     res.status(500).json({ error: 'OAuth not configured', message: e.message });
   }
 });
 
-// GET /api/auth/entra/callback - TODO: exchange code for tokens, create session, redirect to app
-router.get('/entra/callback', (req, res) => {
-  const { code, state } = req.query;
-  if (!code) return res.redirect(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
-  // TODO: exchangeCodeForTokens(code), store tokens, redirect to app with session
-  res.redirect((process.env.FRONTEND_ORIGIN || 'http://localhost:5173') + '/home');
+// GET /api/auth/entra/callback - exchange code for tokens, store, redirect
+router.get('/entra/callback', async (req, res) => {
+  const { code, state } = req.query; // state = userId
+  if (!code || !state) return res.redirect(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+
+  try {
+    await msGraph.exchangeCodeForTokens(String(code), String(state));
+    res.redirect((process.env.FRONTEND_ORIGIN || 'http://localhost:5173') + '/settings?ms=connected');
+  } catch (e) {
+    console.error('entra callback error:', e);
+    res.status(500).send('Microsoft login failed');
+  }
 });
+
+// GET /api/auth/microsoft/login  (alias)
+router.get('/microsoft/login', async (req, res) => {
+  const userId = req.query.userId || req.query.state || '';
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  try {
+    const url = await msGraph.getAuthorizeUrl(String(userId));
+    res.redirect(url);
+  } catch (e) {
+    res.status(500).json({ error: 'OAuth not configured', message: e.message });
+  }
+});
+
+// GET /api/auth/microsoft/callback (alias)  <-- IMPORTANT
+router.get('/microsoft/callback', async (req, res) => {
+  const { code, state } = req.query; // state = userId
+  if (!code || !state) return res.redirect(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+
+  try {
+    await msGraph.exchangeCodeForTokens(String(code), String(state));
+    res.redirect((process.env.FRONTEND_ORIGIN || 'http://localhost:5173') + '/settings?ms=connected');
+  } catch (e) {
+    console.error('microsoft callback error:', e);
+    res.status(500).send('Microsoft login failed');
+  }
+});
+
+// GET /api/auth/microsoft/status?userId=...
+router.get('/microsoft/status', (req, res) => {
+  const userId = req.query.userId || '';
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  const db = getDb();
+  const row = db
+    .prepare("SELECT username, expiresAt FROM oauth_accounts WHERE userId = ? AND provider = 'microsoft'")
+    .get(String(userId));
+
+  const connected = !!row && typeof row.expiresAt === 'number' && row.expiresAt > Date.now();
+  res.json({ connected, username: row?.username || null, expiresAt: row?.expiresAt || null });
+});
+
 
 export default router;
