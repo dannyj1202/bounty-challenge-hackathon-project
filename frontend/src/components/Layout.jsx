@@ -34,7 +34,7 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
-  const showInsights = canAccessInsights;
+  const showInsights = isAdmin || canAccessInsights;
   const brandingStyle = institutionBranding?.primaryColor
     ? { '--primary': institutionBranding.primaryColor, '--primary-hover': darkenHex(institutionBranding.primaryColor) || institutionBranding.primaryColor }
     : undefined;

@@ -32,7 +32,7 @@ export default function App() {
       <Route path="/quiz" element={<PrivateRoute><Layout><Quiz /></Layout></PrivateRoute>} />
       <Route path="/notes" element={<PrivateRoute><Layout><Notes /></Layout></PrivateRoute>} />
       <Route path="/community" element={<PrivateRoute><Layout><Community /></Layout></PrivateRoute>} />
-      <Route path="/insights" element={<PrivateRoute adminOnly requireInstitutionPlan><Layout><Insights /></Layout></PrivateRoute>} />
+      <Route path="/insights" element={<PrivateRoute adminOnly><Layout><Insights /></Layout></PrivateRoute>} />
       <Route path="/pricing" element={<PrivateRoute><Layout><Pricing /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
     </Routes>
