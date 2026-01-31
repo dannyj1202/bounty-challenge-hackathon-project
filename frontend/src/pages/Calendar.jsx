@@ -26,12 +26,12 @@ export default function Calendar() {
   const [syncNote, setSyncNote] = useState('');
 
   const start = new Date().toISOString().slice(0, 10);
-  const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const end = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const load = () => {
     if (!userId) return;
     const rangeStart = new Date().toISOString();
-    const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    const rangeEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     Promise.all([
       events.list(userId, start, end),
       assignments.list(userId),
@@ -48,7 +48,7 @@ export default function Calendar() {
     if (!userId) return;
     setSyncing(true);
     const rangeStart = new Date().toISOString();
-    const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    const rangeEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     calendar.sync(userId, rangeStart, rangeEnd)
       .then(() => { load(); setSyncNote('Calendar synced with Outlook.'); })
       .catch(() => { load(); setSyncNote(''); })
@@ -62,7 +62,7 @@ export default function Calendar() {
     setSyncNote('');
     try {
       const rangeStart = new Date().toISOString();
-      const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const rangeEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
       const data = await calendar.sync(userId, rangeStart, rangeEnd);
       load();
       setSyncNote(
