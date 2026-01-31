@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { auth, dev } from '../api/client';
 
@@ -10,6 +10,29 @@ export default function Login() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle Microsoft sign-in callback (no-userId first-time sign-in)
+  useEffect(() => {
+    const ms = searchParams.get('ms');
+    const token = searchParams.get('token');
+    const userId = searchParams.get('userId');
+    const emailFromMs = searchParams.get('email');
+    const roleFromMs = searchParams.get('role') || 'student';
+    if (ms === 'callback' && token && userId) {
+      login(
+        { id: userId, email: emailFromMs || '', role: roleFromMs },
+        token
+      );
+      setSearchParams({});
+      navigate('/home', { replace: true });
+      return;
+    }
+    if (ms === 'error') {
+      setError(searchParams.get('reason') === 'no_email' ? 'Microsoft account has no email.' : 'Microsoft sign-in failed.');
+      setSearchParams({});
+    }
+  }, [searchParams, login, navigate, setSearchParams]);
 
   const handleMockLogin = async (e) => {
     e.preventDefault();
@@ -63,8 +86,13 @@ export default function Login() {
         <p style={{ marginTop: 16 }}>
           <button type="button" className="btn btn-secondary" onClick={handleSeedDemo} disabled={loading}>Quick demo (seed data)</button>
         </p>
+        <p style={{ marginTop: 16 }}>
+          <a href={auth.getMicrosoftLoginUrl('')} className="btn btn-secondary">
+            Sign in with Microsoft
+          </a>
+        </p>
         <p style={{ marginTop: 12, fontSize: 14, color: 'var(--text-muted)' }}>
-          For real university login: configure Entra ID and use <code>GET /api/auth/entra/login</code>.
+          First-time users: click above. Already have an account? Use mock sign-in, then connect Microsoft in Settings.
         </p>
       </div>
     </div>

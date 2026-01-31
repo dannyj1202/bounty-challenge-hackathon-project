@@ -25,24 +25,27 @@ export async function getAuthorizeUrl(state = "") {
 }
 
 /**
- * Exchange OAuth code for tokens, store in oauth_accounts.
+ * Exchange OAuth code for tokens only (no DB store). Used for signup flow.
  */
-export async function exchangeCodeForTokens(code, userId) {
+export async function exchangeCodeOnly(code) {
   assertConfigured();
-
   const scopes = getScopes();
   const tokenResponse = await msalApp.acquireTokenByCode({
     code: String(code),
     scopes,
     redirectUri: process.env.ENTRA_REDIRECT_URI,
   });
+  return tokenResponse;
+}
 
+/**
+ * Store token response in oauth_accounts for a given userId.
+ */
+export function storeTokensForUser(userId, tokenResponse) {
   const now = Date.now();
   const expiresAt = now + (tokenResponse.expiresIn ?? 3600) * 1000;
-
   const account = tokenResponse.account || {};
   const db = getDb();
-
   db.prepare(`
     INSERT INTO oauth_accounts
       (userId, provider, homeAccountId, tenantId, username, scopes, accessToken, expiresAt, createdAt, updatedAt)
@@ -67,8 +70,31 @@ export async function exchangeCodeForTokens(code, userId) {
     now,
     now
   );
+}
 
+/**
+ * Exchange OAuth code for tokens, store in oauth_accounts.
+ */
+export async function exchangeCodeForTokens(code, userId) {
+  const tokenResponse = await exchangeCodeOnly(code);
+  storeTokensForUser(userId, tokenResponse);
   return tokenResponse;
+}
+
+/**
+ * Call Graph /me to get profile (mail, userPrincipalName, displayName).
+ */
+export async function getMe(accessToken) {
+  const res = await fetch("https://graph.microsoft.com/v1.0/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`Graph /me failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return {
+    mail: data.mail || null,
+    userPrincipalName: data.userPrincipalName || null,
+    displayName: data.displayName || null,
+  };
 }
 
 /**

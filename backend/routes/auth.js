@@ -44,13 +44,28 @@ router.post('/mock-login', (req, res) => {
 });
 
 
-// GET /api/auth/entra/login?userId=...  - redirect to Entra ID (OAuth)
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const SIGNUP_STATE = 'signup';
+
+function getOrCreateUserByEmail(db, email, role = 'student') {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalized);
+  if (!user) {
+    const id = 'user-' + Buffer.from(normalized).toString('base64').replace(/=+/g, '').slice(0, 20);
+    db.prepare('INSERT INTO users (id, email, role) VALUES (?, ?, ?)').run(id, normalized, role);
+    user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  }
+  return user;
+}
+
+// GET /api/auth/entra/login?userId=...  - redirect to Entra ID (OAuth). userId optional: if missing, state=signup for first-time sign-in.
 router.get('/entra/login', async (req, res) => {
   const userId = req.query.userId || req.query.state || '';
-  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const state = userId || SIGNUP_STATE;
 
   try {
-    const url = await msGraph.getAuthorizeUrl(String(userId));
+    const url = await msGraph.getAuthorizeUrl(String(state));
     res.redirect(url);
   } catch (e) {
     res.status(500).json({ error: 'OAuth not configured', message: e.message });
@@ -59,39 +74,65 @@ router.get('/entra/login', async (req, res) => {
 
 // GET /api/auth/entra/callback - exchange code for tokens, store, redirect
 router.get('/entra/callback', async (req, res) => {
-  const { code, state } = req.query; // state = userId
-  if (!code || !state) return res.redirect(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+  const { code, state } = req.query;
+  if (!code || !state) return res.redirect(FRONTEND_ORIGIN);
 
   try {
+    if (state === SIGNUP_STATE) {
+      const tokenResponse = await msGraph.exchangeCodeOnly(String(code));
+      const profile = await msGraph.getMe(tokenResponse.accessToken);
+      const email = profile.mail || profile.userPrincipalName;
+      if (!email) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=no_email');
+      const db = getDb();
+      const user = getOrCreateUserByEmail(db, email, 'student');
+      if (!user) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=create_failed');
+      msGraph.storeTokensForUser(user.id, tokenResponse);
+      const token = 'mock-token-' + user.id;
+      const params = new URLSearchParams({ ms: 'callback', token, userId: user.id, email: user.email, role: user.role });
+      return res.redirect(FRONTEND_ORIGIN + '/login?' + params.toString());
+    }
     await msGraph.exchangeCodeForTokens(String(code), String(state));
-    res.redirect((process.env.FRONTEND_ORIGIN || 'http://localhost:5173') + '/settings?ms=connected');
+    res.redirect(FRONTEND_ORIGIN + '/settings?ms=connected');
   } catch (e) {
     console.error('entra callback error:', e);
     res.status(500).send('Microsoft login failed');
   }
 });
 
-// GET /api/auth/microsoft/login  (alias)
+// GET /api/auth/microsoft/login  (alias). userId optional: if missing, first-time sign-in.
 router.get('/microsoft/login', async (req, res) => {
   const userId = req.query.userId || req.query.state || '';
-  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const state = userId || SIGNUP_STATE;
 
   try {
-    const url = await msGraph.getAuthorizeUrl(String(userId));
+    const url = await msGraph.getAuthorizeUrl(String(state));
     res.redirect(url);
   } catch (e) {
     res.status(500).json({ error: 'OAuth not configured', message: e.message });
   }
 });
 
-// GET /api/auth/microsoft/callback (alias)  <-- IMPORTANT
+// GET /api/auth/microsoft/callback (alias)
 router.get('/microsoft/callback', async (req, res) => {
-  const { code, state } = req.query; // state = userId
-  if (!code || !state) return res.redirect(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+  const { code, state } = req.query;
+  if (!code || !state) return res.redirect(FRONTEND_ORIGIN);
 
   try {
+    if (state === SIGNUP_STATE) {
+      const tokenResponse = await msGraph.exchangeCodeOnly(String(code));
+      const profile = await msGraph.getMe(tokenResponse.accessToken);
+      const email = profile.mail || profile.userPrincipalName;
+      if (!email) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=no_email');
+      const db = getDb();
+      const user = getOrCreateUserByEmail(db, email, 'student');
+      if (!user) return res.redirect(FRONTEND_ORIGIN + '/login?ms=error&reason=create_failed');
+      msGraph.storeTokensForUser(user.id, tokenResponse);
+      const token = 'mock-token-' + user.id;
+      const params = new URLSearchParams({ ms: 'callback', token, userId: user.id, email: user.email, role: user.role });
+      return res.redirect(FRONTEND_ORIGIN + '/login?' + params.toString());
+    }
     await msGraph.exchangeCodeForTokens(String(code), String(state));
-    res.redirect((process.env.FRONTEND_ORIGIN || 'http://localhost:5173') + '/settings?ms=connected');
+    res.redirect(FRONTEND_ORIGIN + '/settings?ms=connected');
   } catch (e) {
     console.error('microsoft callback error:', e);
     res.status(500).send('Microsoft login failed');
