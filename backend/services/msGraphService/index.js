@@ -85,3 +85,5 @@ export function getStoredAccessToken(userId) {
   if (typeof row.expiresAt === "number" && row.expiresAt <= Date.now()) return null;
   return row.accessToken;
 }
+
+export { getCalendarEvents, createCalendarEvent } from './calendar.graph.js';

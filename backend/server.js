@@ -18,7 +18,8 @@ import notificationsRoutes from './routes/notifications.js';
 import insightsRoutes from './routes/insights.js';
 import webhooksRoutes from './routes/webhooks.js';
 import devRoutes from './routes/dev.js';
-import communityRoutes from './routes/community.js'; // ✅ add this
+import communityRoutes from './routes/community.js';
+import calendarRoutes from './routes/calendar.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,6 +51,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/dev', devRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

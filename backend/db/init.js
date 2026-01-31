@@ -81,6 +81,21 @@ export function initDb() {
       updatedAt TEXT DEFAULT (datetime('now'))
     );
 
+    /* Adaptive quiz sessions (1 question at a time) */
+    CREATE TABLE IF NOT EXISTS quizAdaptiveSessions (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id),
+      topic TEXT NOT NULL,
+      difficulty INTEGER NOT NULL DEFAULT 3,
+      currentQuestion TEXT,
+      currentOptions TEXT,
+      currentAnswerIndex INTEGER,
+      currentExplanation TEXT,
+      currentSubtopic TEXT,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS feedback (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId TEXT NOT NULL REFERENCES users(id),
@@ -161,10 +176,11 @@ export function initDb() {
       ON assignments(userId, dueDate, completed);
     
     CREATE UNIQUE INDEX IF NOT EXISTS idx_events_user_sourceId
-    ON events(userId, sourceId)
-    WHERE sourceId IS NOT NULL;
+      ON events(userId, sourceId)
+      WHERE sourceId IS NOT NULL;
 
-
+    CREATE INDEX IF NOT EXISTS idx_adaptive_sessions_user_updated
+      ON quizAdaptiveSessions(userId, updatedAt);
   `);
 
   db.close();
