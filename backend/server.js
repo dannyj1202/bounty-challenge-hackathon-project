@@ -23,9 +23,19 @@ import calendarRoutes from './routes/calendar.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
-
-app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
+// Comma-separated list so you and friends can use different URLs (e.g. localhost + your LAN IP)
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173').split(',').map((s) => s.trim()).filter(Boolean);
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin or non-browser
+    if (FRONTEND_ORIGINS.includes(origin)) return cb(null, true);
+    // In dev, allow any origin ending with :5173 so friends on your network can log in
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/[^/]+:5173$/.test(origin)) return cb(null, true);
+    cb(null, false);
+  },
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // Ensure DB exists and run migrations
