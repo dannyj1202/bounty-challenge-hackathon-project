@@ -15,6 +15,11 @@ export function getDb() {
   if (!db) {
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    // Dev check: 1 = FKs enforced, 0 = documentation only
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('FKs:', db.pragma('foreign_keys', { simple: true }));
+    }
   }
   return db;
 }

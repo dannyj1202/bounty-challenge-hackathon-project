@@ -10,6 +10,7 @@ const dbPath = join(dataDir, 'copilot.db');
 export function initDb() {
   if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
   const db = new Database(dbPath);
+  db.pragma('foreign_keys = ON');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -103,6 +104,46 @@ export function initDb() {
       userId TEXT NOT NULL REFERENCES users(id),
       createdAt TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS copilot_suggestions (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL,
+      label TEXT,
+      payload TEXT,
+      status TEXT DEFAULT 'pending',
+      createdAt TEXT DEFAULT (datetime('now')),
+      decidedAt TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      dueDate TEXT,
+      source TEXT,
+      createdAt TEXT DEFAULT (datetime('now')),
+      completed INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id),
+      title TEXT,
+      content TEXT,
+      createdAt TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(userId, startAt);
+    CREATE INDEX IF NOT EXISTS idx_events_user_end ON events(userId, endAt);
+
+    CREATE INDEX IF NOT EXISTS idx_suggestions_user_status_created
+      ON copilot_suggestions(userId, status, createdAt);
+
+    CREATE INDEX IF NOT EXISTS idx_notes_user_created ON notes(userId, createdAt);
+
+    CREATE INDEX IF NOT EXISTS idx_assignments_user_due_completed
+      ON assignments(userId, dueDate, completed);
   `);
 
   db.close();
