@@ -2,26 +2,18 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../context/PlanContext';
-
-function darkenHex(hex, percent = 12) {
-  if (!hex || typeof hex !== 'string') return undefined;
-  const c = hex.replace(/^#/, '');
-  if (c.length !== 6) return undefined;
-  const r = Math.max(0, parseInt(c.slice(0, 2), 16) - (255 * percent) / 100);
-  const g = Math.max(0, parseInt(c.slice(2, 4), 16) - (255 * percent) / 100);
-  const b = Math.max(0, parseInt(c.slice(4, 6), 16) - (255 * percent) / 100);
-  return `#${Math.round(r).toString(16).padStart(2, '0')}${Math.round(g).toString(16).padStart(2, '0')}${Math.round(b).toString(16).padStart(2, '0')}`;
-}
+import ThemeToggle from './ThemeToggle';
+import { LayoutDashboard, Calendar, HelpCircle, FileText, Users, BarChart3, Tag, Settings } from 'lucide-react';
 
 const nav = [
-  { to: '/home', label: 'Home' },
-  { to: '/calendar', label: 'Calendar' },
-  { to: '/quiz', label: 'Quiz' },
-  { to: '/notes', label: 'Notes' },
-  { to: '/community', label: 'Community' },
-  { to: '/insights', label: 'Insights (Admin)' },
-  { to: '/pricing', label: 'Pricing' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/home', label: 'Dashboard', Icon: LayoutDashboard },
+  { to: '/calendar', label: 'Calendar', Icon: Calendar },
+  { to: '/quiz', label: 'Quiz', Icon: HelpCircle },
+  { to: '/notes', label: 'Notes', Icon: FileText },
+  { to: '/community', label: 'Community', Icon: Users },
+  { to: '/insights', label: 'Insights (Admin)', Icon: BarChart3 },
+  { to: '/pricing', label: 'Pricing', Icon: Tag },
+  { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 
 export default function Layout({ children }) {
@@ -35,33 +27,66 @@ export default function Layout({ children }) {
   };
 
   const showInsights = isAdmin || canAccessInsights;
-  const brandingStyle = institutionBranding?.primaryColor
-    ? { '--primary': institutionBranding.primaryColor, '--primary-hover': darkenHex(institutionBranding.primaryColor) || institutionBranding.primaryColor }
-    : undefined;
-
-  const appName = institutionBranding?.name?.trim() || 'Smart Study Copilot';
+  const filteredNav = nav.filter(({ to }) => to !== '/insights' || showInsights);
+  const appName = institutionBranding?.name?.trim() || 'ECStudy';
 
   return (
-    <div className="app" style={brandingStyle}>
-      <header className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {institutionBranding?.logoUrl && (
-            <img src={institutionBranding.logoUrl} alt="" style={{ height: 32, width: 'auto', objectFit: 'contain' }} />
-          )}
-          <h1>{appName}</h1>
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0f] text-gray-900 dark:text-white flex transition-colors duration-200">
+      {/* Left sidebar - fixed */}
+      <aside className="w-60 shrink-0 flex flex-col border-r border-gray-200 dark:border-violet-900/30 bg-gray-50 dark:bg-[#0d0d12] transition-colors duration-200">
+        <div className="p-5 border-b border-gray-200 dark:border-violet-900/20">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/ecstudy-logo.png" alt="" className="w-9 h-9 shrink-0 rounded-lg object-contain" aria-hidden />
+            <span className="font-semibold text-gray-900 dark:text-white tracking-tight truncate">{appName}</span>
+          </div>
         </div>
-        <nav className="app-nav">
-          {nav.filter(({ to }) => to !== '/insights' || showInsights).map(({ to, label }) => (
-            <NavLink key={to} to={to} className={({ isActive }) => isActive ? 'active' : ''}>{label}</NavLink>
+        <nav className="flex-1 py-4 px-3 overflow-y-auto">
+          {filteredNav.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
+                  isActive
+                    ? 'bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-200 border-l-2 border-l-violet-500 dark:border-l-violet-400 -ml-px pl-3 shadow-[0_0_20px_rgba(139,92,246,0.12)]'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200'
+                }`
+              }
+            >
+              <Icon className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400/80" aria-hidden />
+              <span>{label}</span>
+            </NavLink>
           ))}
-          <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontSize: 14 }}>{user?.email}</span>
-          <span className="plan-badge" style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--border)', color: 'var(--text-muted)' }}>
+        </nav>
+        <div className="p-4 border-t border-gray-200 dark:border-violet-900/20 space-y-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <img
+              src="/microsoft-logo.png"
+              alt=""
+              className="w-6 h-6 shrink-0 rounded-lg object-contain bg-white dark:bg-white/5 ring-1 ring-gray-200 dark:ring-violet-500/20"
+              aria-hidden
+            />
+            <p className="text-xs text-gray-800 dark:text-gray-500 truncate min-w-0" title={user?.email}>{user?.email}</p>
+          </div>
+          <span className="inline-block text-xs px-2 py-1 rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-200">
             {plan === 'free' ? 'Free' : plan === 'elite' ? 'Elite' : 'Institution'}
           </span>
-          <button type="button" className="btn btn-secondary" onClick={handleLogout}>Logout</button>
-        </nav>
-      </header>
-      <main className="main">{children}</main>
+          <div className="flex items-center gap-2 mt-2">
+            <ThemeToggle />
+            <span className="text-xs text-gray-600 dark:text-gray-500">Theme</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full mt-2 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-colors duration-200"
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+      <main className="flex-1 min-w-0 overflow-auto bg-white dark:bg-[#0a0a0f] transition-colors duration-200">
+        {children}
+      </main>
     </div>
   );
 }

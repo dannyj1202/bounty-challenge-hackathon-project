@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import { usePlan } from './context/PlanContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Calendar from './pages/Calendar';
 import Quiz from './pages/Quiz';
@@ -26,7 +27,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Landing />} />
       <Route path="/home" element={<PrivateRoute><Layout><Home /></Layout></PrivateRoute>} />
       <Route path="/calendar" element={<PrivateRoute><Layout><Calendar /></Layout></PrivateRoute>} />
       <Route path="/quiz" element={<PrivateRoute><Layout><Quiz /></Layout></PrivateRoute>} />

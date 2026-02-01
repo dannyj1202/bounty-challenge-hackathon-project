@@ -1,15 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { BookOpen, ClipboardEdit, Share2 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export default function Notes() {
   const { userId } = useAuth();
 
-  // Your existing note UI state (keep minimal)
   const [text, setText] = useState('');
-
-  // OneNote explorer state
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
@@ -95,78 +93,79 @@ export default function Notes() {
     }
   };
 
-  const paneStyle = {
-    border: '1px solid rgba(0,0,0,0.08)',
-    borderRadius: 10,
-    background: 'white',
-    overflow: 'hidden'
-  };
-
-  const headerStyle = {
-    padding: '10px 12px',
-    borderBottom: '1px solid rgba(0,0,0,0.08)',
-    background: '#f7f7f9',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  };
-
-  const listItem = (active) => ({
-    padding: '10px 12px',
-    cursor: 'pointer',
-    background: active ? '#eef3ff' : 'white',
-    borderBottom: '1px solid rgba(0,0,0,0.06)'
-  });
+  const cardBase = 'rounded-xl border border-gray-200 dark:border-violet-500/20 bg-gray-50 dark:bg-[#16161d]/90 backdrop-blur-sm transition-all duration-200 hover:border-violet-400/40 dark:hover:border-violet-500/40 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)]';
+  const paneBase = 'rounded-xl border border-gray-200 dark:border-violet-500/20 bg-gray-50 dark:bg-[#16161d]/80 overflow-hidden';
+  const paneHeader = 'px-4 py-3 border-b border-gray-200 dark:border-violet-500/20 bg-gray-100 dark:bg-black/20 flex items-center justify-between';
+  const listItem = (active) =>
+    `px-4 py-3 cursor-pointer border-b border-gray-200 dark:border-violet-500/10 last:border-0 transition-all duration-200 ${
+      active ? 'bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-200 border-l-2 border-l-violet-500 dark:border-l-violet-400' : 'text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+    }`;
 
   return (
-    <div>
-      <h2>Notes</h2>
+    <div className="min-h-full bg-white dark:bg-[#0a0a0f] text-gray-900 dark:text-white max-w-6xl mx-auto px-6 py-8 transition-colors duration-200">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-8">Notes</h2>
 
-      {/* ✅ OneNote Explorer */}
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div>
-            <h3 style={{ marginBottom: 6 }}>OneNote</h3>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Browse notebooks → sections → pages. Click Open to launch in OneNote.
-            </p>
+      {/* OneNote Explorer — 3-column dark layout */}
+      <div className={`${cardBase} p-5 mb-8`}>
+        <div className="flex flex-wrap items-start gap-4 mb-4">
+          <img
+            src="/onenote-logo.png"
+            alt=""
+            className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-xl object-contain bg-white dark:bg-white/5 ring-1 ring-gray-200 dark:ring-violet-500/20"
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1 flex flex-wrap justify-between items-center gap-4">
+            <div>
+              <h3 className="text-gray-900 dark:text-white font-semibold text-base mb-1 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" aria-hidden />
+                Sync OneNote
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Browse notebooks → sections → pages. Click Open to launch in OneNote.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="px-5 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 dark:bg-gradient-to-r dark:from-violet-600 dark:to-indigo-600 dark:hover:from-violet-500 dark:hover:to-indigo-500 text-white font-medium transition-all duration-200 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] disabled:opacity-50"
+              onClick={loadNotebooks}
+              disabled={loading || !userId}
+            >
+              {loading ? 'Loading…' : 'Load OneNote'}
+            </button>
           </div>
-          <button className="btn" type="button" onClick={loadNotebooks} disabled={loading || !userId}>
-            {loading ? 'Loading…' : 'Load OneNote'}
-          </button>
         </div>
 
-        {err && <p className="error" style={{ marginTop: 10 }}>{err}</p>}
+        {err && <p className="text-red-400 text-sm mb-4">{err}</p>}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 12, marginTop: 12 }}>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr] gap-4">
           {/* Notebooks */}
-          <div style={paneStyle}>
-            <div style={headerStyle}>
-              <strong>Notebooks</strong>
+          <div className={paneBase}>
+            <div className={paneHeader}>
+              <span className="font-semibold text-gray-900 dark:text-white">Notebooks</span>
               {selectedNotebook?.url && (
-                <a href={selectedNotebook.url} target="_blank" rel="noreferrer">Open</a>
+                <a href={selectedNotebook.url} target="_blank" rel="noreferrer" className="text-violet-300 hover:text-violet-200 text-sm transition-colors">
+                  Open
+                </a>
               )}
             </div>
-            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+            <div className="max-h-80 overflow-y-auto">
               {notebooks.length === 0 && (
-                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                <div className="px-4 py-4 text-gray-400 text-sm">
                   {loading ? 'Loading…' : 'No notebooks loaded yet.'}
                 </div>
               )}
               {notebooks.map((n) => (
                 <div
                   key={n.id}
-                  style={listItem(n.id === selectedNotebookId)}
+                  className={listItem(n.id === selectedNotebookId)}
                   onClick={() => loadSections(n.id)}
                   title={n.name}
                 >
-                  <div style={{ fontWeight: 600 }}>{n.name}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{n.name}</div>
                   {n.url && (
-                    <div style={{ fontSize: 12, marginTop: 2 }}>
-                      <a href={n.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                        Open in OneNote
-                      </a>
-                    </div>
+                    <a href={n.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-violet-300 hover:text-violet-200 mt-1 block">
+                      Open in OneNote
+                    </a>
                   )}
                 </div>
               ))}
@@ -174,38 +173,36 @@ export default function Notes() {
           </div>
 
           {/* Sections */}
-          <div style={paneStyle}>
-            <div style={headerStyle}>
-              <strong>Sections</strong>
+          <div className={paneBase}>
+            <div className={paneHeader}>
+              <span className="font-semibold text-gray-900 dark:text-white">Sections</span>
               {selectedSection?.url && (
-                <a href={selectedSection.url} target="_blank" rel="noreferrer">Open</a>
+                <a href={selectedSection.url} target="_blank" rel="noreferrer" className="text-violet-300 hover:text-violet-200 text-sm transition-colors">
+                  Open
+                </a>
               )}
             </div>
-            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+            <div className="max-h-80 overflow-y-auto">
               {!selectedNotebookId && (
-                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
-                  Select a notebook
-                </div>
+                <div className="px-4 py-4 text-gray-400 text-sm">Select a notebook</div>
               )}
               {selectedNotebookId && sections.length === 0 && (
-                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                <div className="px-4 py-4 text-gray-400 text-sm">
                   {loading ? 'Loading…' : 'No sections found.'}
                 </div>
               )}
               {sections.map((s) => (
                 <div
                   key={s.id}
-                  style={listItem(s.id === selectedSectionId)}
+                  className={listItem(s.id === selectedSectionId)}
                   onClick={() => loadPages(s.id)}
                   title={s.name}
                 >
-                  <div style={{ fontWeight: 600 }}>{s.name}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{s.name}</div>
                   {s.url && (
-                    <div style={{ fontSize: 12, marginTop: 2 }}>
-                      <a href={s.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                        Open section
-                      </a>
-                    </div>
+                    <a href={s.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-violet-300 hover:text-violet-200 mt-1 block">
+                      Open section
+                    </a>
                   )}
                 </div>
               ))}
@@ -213,35 +210,33 @@ export default function Notes() {
           </div>
 
           {/* Pages */}
-          <div style={paneStyle}>
-            <div style={headerStyle}>
-              <strong>Pages</strong>
-              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+          <div className={paneBase}>
+            <div className={paneHeader}>
+              <span className="font-semibold text-gray-900 dark:text-white">Pages</span>
+              <span className="text-gray-400 text-xs">
                 {pages.length ? `${pages.length} loaded` : ''}
               </span>
             </div>
-            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+            <div className="max-h-80 overflow-y-auto">
               {!selectedSectionId && (
-                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
-                  Select a section
-                </div>
+                <div className="px-4 py-4 text-gray-400 text-sm">Select a section</div>
               )}
               {selectedSectionId && pages.length === 0 && (
-                <div style={{ padding: 12, color: 'var(--text-muted)' }}>
+                <div className="px-4 py-4 text-gray-400 text-sm">
                   {loading ? 'Loading…' : 'No pages found.'}
                 </div>
               )}
               {pages.map((p) => (
-                <div key={p.id} style={{ padding: '10px 12px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                  <div style={{ fontWeight: 600 }}>{p.title}</div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
+                <div key={p.id} className="px-4 py-3 border-b border-gray-200 dark:border-violet-500/10 last:border-0 text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                  <div className="font-medium text-gray-900 dark:text-white">{p.title}</div>
+                  <div className="flex flex-wrap gap-3 items-center mt-2 text-xs">
                     {p.url ? (
-                      <a href={p.url} target="_blank" rel="noreferrer">Open page</a>
+                      <a href={p.url} target="_blank" rel="noreferrer" className="text-violet-300 hover:text-violet-200">Open page</a>
                     ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No link</span>
+                      <span className="text-gray-500">No link</span>
                     )}
                     {p.lastModifiedDateTime && (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                      <span className="text-gray-500">
                         Updated {new Date(p.lastModifiedDateTime).toLocaleString()}
                       </span>
                     )}
@@ -253,37 +248,32 @@ export default function Notes() {
         </div>
       </div>
 
-      {/* Existing area (keep) */}
-      <div className="card">
-        <h3>Paste text or upload (optional)</h3>
+      {/* Paste / upload — dark textarea, purple focus, voice CTA */}
+      <div className={`${cardBase} p-5 mb-6`}>
+        <h3 className="text-gray-900 dark:text-white font-semibold text-base mb-2 flex items-center gap-2">
+          <ClipboardEdit className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" aria-hidden />
+          Paste text or upload (optional)
+        </h3>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Paste your notes here..."
-          style={{ width: '100%', minHeight: 160 }}
+          className="w-full min-h-40 py-3 px-4 rounded-xl bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-violet-500/30 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 resize-y transition-all duration-200"
         />
-        <button type="button" className="btn" style={{ marginTop: 10 }}>
-          Voice record (speech-to-text)
-        </button>
       </div>
 
-      <div className="card">
-        <h3>Actions</h3>
-        <p style={{ color: 'var(--text-muted)' }}>AI suggests; you control (accept / edit / ignore).</p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" className="btn">Summarize</button>
-          <button type="button" className="btn">Translate</button>
-          <button type="button" className="btn">Generate flashcards</button>
-          <button type="button" className="btn">Generate practice Qs</button>
-        </div>
-      </div>
-
-      <div className="card">
-        <h3>Export / Save to OneNote</h3>
-        <p style={{ color: 'var(--text-muted)' }}>
+      {/* Export / Save to OneNote */}
+      <div className={`${cardBase} p-5`}>
+        <h3 className="text-gray-900 dark:text-white font-semibold text-base mb-2 flex items-center gap-2">
+          <Share2 className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" aria-hidden />
+          Export / Save to OneNote
+        </h3>
+        <p className="text-gray-400 text-sm mb-4">
           (Optional) You can keep this as a “future work” bullet if time is tight.
         </p>
-        <button type="button" className="btn">Save to OneNote</button>
+        <button type="button" className="px-5 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 dark:bg-gradient-to-r dark:from-violet-600 dark:to-indigo-600 dark:hover:from-violet-500 dark:hover:to-indigo-500 text-white font-medium transition-all duration-200 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]">
+          Save to OneNote
+        </button>
       </div>
     </div>
   );

@@ -74,10 +74,10 @@ export default function Insights() {
   const totalFeedback = feedbackDist.reduce((s, f) => s + (f.c || 0), 0);
 
   return (
-    <div ref={dashboardRef}>
-      <div className="card" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+    <div ref={dashboardRef} className="min-h-full bg-white dark:bg-[#0a0a0f] text-gray-900 dark:text-white max-w-6xl mx-auto px-6 py-8 transition-colors duration-200">
+      <div className="card rounded-xl border border-gray-200 dark:border-violet-500/20 bg-gray-50 dark:bg-[#16161d]/90 p-5 mb-6" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Analytics dashboard (Admin / Teacher)</h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white m-0">Analytics dashboard (Admin / Teacher)</h2>
           <p style={{ color: 'var(--text-muted)', margin: '4px 0 0' }}>
             Aggregated & anonymized — workload patterns, engagement trends, and academic pressure points. No individual student data.
           </p>

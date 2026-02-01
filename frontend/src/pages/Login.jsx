@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../api/client';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function Login() {
   const [email, setEmail] = useState('student@university.edu');
@@ -49,7 +50,10 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page min-h-screen flex flex-col items-center justify-center p-6 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="card login-card">
         <h2>Sign in</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>

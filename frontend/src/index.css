@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --bg: #f5f6f8;
   --surface: #fff;
@@ -50,10 +54,37 @@ input, select, textarea { font: inherit; }
 .form-group label { display: block; margin-bottom: 4px; font-weight: 500; }
 .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 480px; width: 90%; max-height: 90vh; overflow: auto; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 100; transition: opacity 150ms ease; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 480px; width: 90%; max-height: 90vh; overflow: auto; transition: transform 200ms ease, box-shadow 200ms ease; }
 .modal h3 { margin-top: 0; }
 .modal-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Theme: light = default (vars above). Dark = .dark on html */
+.dark body { background: #0a0a0f; color: #fff; }
+.dark .modal-overlay { background: rgba(0,0,0,.65); backdrop-filter: blur(4px); }
+.dark .modal { background: #16161d; border: 1px solid rgba(139,92,246,0.25); color: #f3e8ff; box-shadow: 0 0 40px rgba(139,92,246,0.08); }
+.dark .modal h3 { color: #fff; font-weight: 600; }
+.dark .form-group label { color: #e9d5ff; }
+.dark .form-group input,
+.dark .form-group select,
+.dark .form-group textarea { background: rgba(0,0,0,.35); border: 1px solid rgba(139,92,246,0.3); border-radius: 10px; color: #fff; padding: 10px 14px; }
+.dark .form-group input:focus,
+.dark .form-group select:focus,
+.dark .form-group textarea:focus { outline: none; border-color: rgba(139,92,246,0.6); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+.dark .form-group input::placeholder,
+.dark .form-group textarea::placeholder { color: #9ca3af; }
+.dark .btn { background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff; border: none; transition: box-shadow 200ms ease, filter 200ms ease; }
+.dark .btn:hover { box-shadow: 0 0 20px rgba(139,92,246,0.4); }
+.dark .btn-secondary { background: transparent; color: #c4b5fd; border: 1px solid rgba(139,92,246,0.4); }
+.dark .btn-secondary:hover { background: rgba(139,92,246,0.1); color: #e9d5ff; }
+.dark .card { background: #16161d; border: 1px solid rgba(139,92,246,0.2); color: #e9d5ff; }
+.dark .loading { color: #9ca3af; }
+.dark .error { color: #f87171; }
+/* Light theme: lighter purple for login/card when not .dark */
+.login-page { background: #faf5ff; }
+.dark .login-page { background: #0a0a0f; }
+.login-card { background: #fff; border: 1px solid rgba(139,92,246,0.2); border-radius: 12px; box-shadow: 0 4px 24px rgba(139,92,246,0.08); }
+.dark .login-card { background: #16161d; border-color: rgba(139,92,246,0.25); }
 
 .grid-3 { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 20px; }
 @media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr; } }
@@ -115,6 +146,40 @@ input, select, textarea { font: inherit; }
 .fc-event-assignment { background: #c65911 !important; border-color: #8a3d09 !important; }
 .fc-event-assignment:hover { background: #a34a0e !important; }
 
+/* FullCalendar dark theme (inside .fc-dark-theme) */
+.fc-dark-theme .fc { --fc-border-color: rgba(139,92,246,0.2); --fc-button-bg-color: #4f46e5; --fc-button-border-color: #4f46e5; --fc-button-hover-bg-color: #7c3aed; --fc-button-hover-border-color: #7c3aed; --fc-button-active-bg-color: #6d28d9; --fc-today-bg-color: rgba(139,92,246,0.12); --fc-page-bg-color: transparent; --fc-neutral-bg-color: rgba(22,22,29,0.5); --fc-list-event-hover-bg-color: rgba(139,92,246,0.1); }
+.fc-dark-theme .fc-toolbar-title { color: #fff; font-weight: 600; }
+.fc-dark-theme .fc-col-header-cell { background: rgba(22,22,29,0.6); color: #e9d5ff; border-color: rgba(139,92,246,0.2); }
+.fc-dark-theme .fc-scrollgrid { border-color: rgba(139,92,246,0.15); }
+.fc-dark-theme .fc-daygrid-day { background: rgba(22,22,29,0.4); }
+.fc-dark-theme .fc-daygrid-day-number { color: #9ca3af; }
+.fc-dark-theme .fc-day-today .fc-daygrid-day-number { color: #c4b5fd; font-weight: 600; }
+.fc-dark-theme .fc-day-today { background: rgba(139,92,246,0.08); box-shadow: inset 0 0 0 1px rgba(139,92,246,0.25); }
+.fc-dark-theme .fc-button { color: #fff; border-radius: 10px; transition: all 0.2s ease; }
+.fc-dark-theme .fc-button:hover { box-shadow: 0 0 16px rgba(139,92,246,0.3); }
+.fc-dark-theme .fc-button-primary:not(:disabled).fc-button-active { background: #7c3aed; border-color: #7c3aed; }
+.fc-dark-theme .fc-event { background: rgba(139,92,246,0.4); border-color: rgba(139,92,246,0.5); border-radius: 6px; }
+.fc-dark-theme .fc-event:hover { background: rgba(139,92,246,0.55); box-shadow: 0 0 12px rgba(139,92,246,0.25); }
+.fc-dark-theme .fc-timegrid-slot { color: #9ca3af; }
+.fc-dark-theme .fc-timegrid-axis { color: #9ca3af; background: rgba(22,22,29,0.6); }
+.fc-dark-theme .fc-timegrid-divider { border-color: rgba(139,92,246,0.2); }
+.fc-dark-theme .fc-daygrid-day-frame { min-height: 80px; }
+
+/* FullCalendar light theme: high-contrast dark text on light backgrounds */
+.fc-light-theme .fc { --fc-border-color: #e5e7eb; --fc-button-bg-color: #7c3aed; --fc-button-border-color: #7c3aed; --fc-button-hover-bg-color: #6d28d9; --fc-button-hover-border-color: #6d28d9; --fc-button-active-bg-color: #5b21b6; --fc-today-bg-color: rgba(139,92,246,0.12); --fc-page-bg-color: #fff; --fc-neutral-bg-color: #f9fafb; }
+.fc-light-theme .fc-toolbar-title { color: #111827 !important; font-weight: 700; }
+.fc-light-theme .fc-col-header-cell { background: #f3f4f6 !important; color: #111827 !important; border-color: #e5e7eb; font-weight: 600; }
+.fc-light-theme .fc-scrollgrid { border-color: #e5e7eb; }
+.fc-light-theme .fc-daygrid-day { background: #fff; }
+.fc-light-theme .fc-daygrid-day-number { color: #111827 !important; font-weight: 500; }
+.fc-light-theme .fc-day-today .fc-daygrid-day-number { color: #5b21b6 !important; font-weight: 700; }
+.fc-light-theme .fc-day-today { background: rgba(139,92,246,0.08); box-shadow: inset 0 0 0 2px rgba(139,92,246,0.25); }
+.fc-light-theme .fc-button { color: #fff; border-radius: 10px; }
+.fc-light-theme .fc-event { background: #7c3aed; border-color: #6d28d9; color: #fff; }
+.fc-light-theme .fc-timegrid-slot { color: #374151; }
+.fc-light-theme .fc-timegrid-axis { color: #374151; background: #f9fafb; }
+.fc-light-theme .fc-daygrid-day-frame { min-height: 80px; }
+
 /* Analytics dashboard (admin/teacher) */
 .analytics-heatmap-grid {
   display: flex;
@@ -156,6 +221,62 @@ input, select, textarea { font: inherit; }
 }
 .analytics-bar-fill-primary { background: linear-gradient(90deg, var(--primary), #4a9fd4); }
 .analytics-bar-value { font-size: 14px; font-weight: 600; text-align: right; }
+
+/* Copilot message bubbles: max-width, no cramming, readable typography */
+.copilot-message-bubble {
+  max-width: 800px;
+}
+.copilot-bubble-text,
+.markdown-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.65;
+  max-width: 100%;
+}
+.markdown-message p,
+.markdown-message ul,
+.markdown-message ol {
+  margin-bottom: 0.75rem;
+}
+.markdown-message p:last-child,
+.markdown-message ul:last-child,
+.markdown-message ol:last-child {
+  margin-bottom: 0;
+}
+.markdown-message li {
+  margin-bottom: 0.25rem;
+}
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+.markdown-message h1:first-child,
+.markdown-message h2:first-child,
+.markdown-message h3:first-child {
+  margin-top: 0;
+}
+.markdown-message pre {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+}
+.markdown-message pre code {
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+.markdown-message code {
+  word-break: break-word;
+}
+.markdown-message blockquote {
+  margin: 0.75rem 0;
+}
 
 @media print {
   .app-header, .btn, .app-nav button { display: none !important; }
