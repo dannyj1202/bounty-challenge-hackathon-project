@@ -1,0 +1,17 @@
+# Render Blueprint: one-click backend deploy
+# Dashboard: New + → Blueprint → Connect repo → select this repo
+services:
+  - type: web
+    name: ecstudy-api
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: npm install && cd backend && npm install
+    startCommand: cd backend && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_ORIGIN
+        sync: false
+        # Set in Render Dashboard after you have your Vercel URL
