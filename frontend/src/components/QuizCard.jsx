@@ -7,7 +7,19 @@ const LETTERS = ['A', 'B', 'C', 'D'];
  * Shows question, multiple choice options, and "Reveal Answer" with correct/incorrect styling.
  * No backend validation; local state only.
  */
-export default function QuizCard({ question, options = [], correctIndex = 0, explanation = '', onBack }) {
+export default function QuizCard({
+  question,
+  options = [],
+  correctIndex = 0,
+  explanation = '',
+  onBack,
+  currentIndex = 0,
+  totalCount = 1,
+  topic = '',
+  onNext,
+  onGetMore,
+  onEndChat,
+}) {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [revealed, setRevealed] = useState(false);
 
@@ -15,6 +27,7 @@ export default function QuizCard({ question, options = [], correctIndex = 0, exp
     ? options.slice(0, 4)
     : [...options, ...Array.from({ length: 4 - options.length }, (_, i) => ({ letter: LETTERS[options.length + i], text: `Option ${LETTERS[options.length + i]}` }))];
   const correctLetter = LETTERS[correctIndex] ?? LETTERS[0];
+  const hasNext = totalCount > 1 && currentIndex < totalCount - 1;
 
   const getOptionStyle = (index) => {
     if (!revealed) {
@@ -69,16 +82,36 @@ export default function QuizCard({ question, options = [], correctIndex = 0, exp
             )}
           </div>
         )}
+        {revealed && hasNext && onNext && (
+          <button
+            type="button"
+            onClick={onNext}
+            className="px-4 py-2.5 rounded-xl border border-violet-400/50 dark:border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-500/10 text-sm font-medium transition-all duration-200"
+          >
+            Next question ({currentIndex + 1}/{totalCount})
+          </button>
+        )}
       </div>
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="mt-4 w-full py-2.5 rounded-xl border border-gray-300 dark:border-violet-500/30 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-violet-500/10 text-sm font-medium transition-all duration-200"
-        >
-          Back to chat
-        </button>
-      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {onGetMore && (
+          <button
+            type="button"
+            onClick={onGetMore}
+            className="px-4 py-2.5 rounded-xl border border-violet-400/50 dark:border-violet-500/40 text-violet-700 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-500/10 text-sm font-medium transition-all duration-200"
+          >
+            Get more questions
+          </button>
+        )}
+        {(onEndChat || onBack) && (
+          <button
+            type="button"
+            onClick={onEndChat || onBack}
+            className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-violet-500/30 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-violet-500/10 text-sm font-medium transition-all duration-200"
+          >
+            {onEndChat ? 'End chat' : 'Back to chat'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

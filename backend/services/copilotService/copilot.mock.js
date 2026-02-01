@@ -40,14 +40,28 @@ export async function generateStudyPlan({ assignments = [], events = [], userId 
   };
 }
 
+const MOCK_QUESTION_STEMS = [
+  'What is a key concept or principle in this topic?',
+  'Which of the following best describes an important aspect?',
+  'What is the main benefit or purpose?',
+  'Which statement is most accurate?',
+  'What would be a correct application of this topic?',
+];
+
 export async function generateQuiz({ topic, difficulty, numQuestions = 5, userId }) {
-  const questions = Array.from({ length: numQuestions }, (_, i) => ({
+  const t = String(topic || 'General study').trim();
+  const questions = Array.from({ length: Math.min(numQuestions, 5) }, (_, i) => ({
     id: `q${i + 1}`,
-    question: `[Mock] ${topic} - Question ${i + 1}: What is the best approach?`,
-    options: ['Option A', 'Option B', 'Option C', 'Option D'],
+    question: `${t}: ${MOCK_QUESTION_STEMS[i % MOCK_QUESTION_STEMS.length]}`,
+    options: [
+      `A key idea related to ${t.slice(0, 40)}${t.length > 40 ? '…' : ''}`,
+      'A common misconception or partial truth',
+      'Another relevant concept or application',
+      'The most accurate or complete answer',
+    ],
     correctIndex: i % 4,
   }));
-  return { questions, topic, difficulty };
+  return { questions, topic: t, difficulty };
 }
 
 export async function getWeakTopicsAndSuggestions({ quizId, answers, userId }) {

@@ -19,7 +19,16 @@ export default function Landing() {
       />
 
       <div className="relative z-10 px-6 py-16 text-center max-w-4xl mx-auto">
-        <img src="/ecstudy-logo.png" alt="ECStudy" className="w-24 h-24 sm:w-28 sm:h-28 mx-auto mb-6 opacity-0 animate-fade-slide-up object-contain" style={{ animationDelay: '0.05s', animationFillMode: 'both' }} />
+        <div
+          className="mx-auto mb-8 opacity-0 animate-fade-slide-up inline-block rounded-2xl p-4 ring-2 ring-violet-500/30 bg-violet-950/20 shadow-[0_0_60px_rgba(139,92,246,0.25)]"
+          style={{ animationDelay: '0.05s', animationFillMode: 'both' }}
+        >
+          <img
+            src="/ecstudy-logo.png"
+            alt="ECStudy"
+            className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 object-contain drop-shadow-[0_0_24px_rgba(139,92,246,0.4)]"
+          />
+        </div>
         <h1
           className="text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight opacity-0 animate-fade-slide-up"
           style={{

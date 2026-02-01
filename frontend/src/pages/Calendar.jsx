@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { events, plan, assignments, copilot, calendar } from '../api/client';
-import { CalendarSync, CalendarDays, Plus, CalendarCheck, Sparkles } from 'lucide-react';
+import { CalendarSync, CalendarDays, Plus, CalendarCheck, Sparkles, Calendar as CalendarIcon } from 'lucide-react';
 
 // ✅ FullCalendar
 import FullCalendar from '@fullcalendar/react';
@@ -24,8 +24,20 @@ export default function Calendar() {
   const [spread, setSpread] = useState('balanced');
 
   const [newTitle, setNewTitle] = useState('');
-  const [newStart, setNewStart] = useState('');
-  const [newEnd, setNewEnd] = useState('');
+  const getDefaultStart = () => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1);
+    d.setMinutes(0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  };
+  const getDefaultEnd = () => {
+    const d = new Date();
+    d.setHours(d.getHours() + 2);
+    d.setMinutes(0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  };
+  const [newStart, setNewStart] = useState(getDefaultStart);
+  const [newEnd, setNewEnd] = useState(getDefaultEnd);
   const [syncNote, setSyncNote] = useState('');
 
   const start = new Date().toISOString().slice(0, 10);
@@ -111,8 +123,8 @@ export default function Calendar() {
 
       setEventList((prev) => [...prev, created]);
       setNewTitle('');
-      setNewStart('');
-      setNewEnd('');
+      setNewStart(getDefaultStart());
+      setNewEnd(getDefaultEnd());
     } catch (err) {
       setError(err.message);
     }
@@ -274,34 +286,62 @@ export default function Calendar() {
       </div>
 
       {/* Add personal event */}
-      <div className={`${cardBase} p-5 mb-6`}>
-        <h3 className={`${cardTitle} flex items-center gap-2 mb-4`}>
+      <div className={`${cardBase} p-6 mb-6`}>
+        <h3 className={`${cardTitle} flex items-center gap-2 mb-1`}>
           <Plus className="w-5 h-5 shrink-0 text-violet-500 dark:text-violet-400" aria-hidden />
           Add personal event
         </h3>
-        <form onSubmit={addEvent} className="flex flex-wrap gap-4 items-end">
-          <div className="form-group mb-0 min-w-[200px]">
-            <label className="block text-gray-800 dark:text-gray-300 text-sm font-medium mb-1">Title</label>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="e.g. Football practice"
-              required
-              className="w-full py-2.5 px-4 rounded-xl bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-violet-500/30 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200"
-            />
+        <p className={`${cardMuted} mb-5`}>
+          Create an event with a title and time. It will appear on the calendar and sync to Outlook when connected.
+        </p>
+        <form onSubmit={addEvent} className="rounded-xl bg-gray-100/80 dark:bg-black/20 border border-gray-200 dark:border-violet-500/20 p-5 transition-colors duration-200">
+          <div className="flex flex-wrap gap-5 items-end">
+            <div className="min-w-[200px] flex-1">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-medium mb-1.5">Event name</label>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. Football practice, Study session"
+                required
+                className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-black/40 border border-gray-200 dark:border-violet-500/30 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200"
+              />
+            </div>
+            <div className="min-w-[180px]">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-medium mb-1.5">Starts</label>
+              <div className="datetime-input-wrapper relative">
+                <input
+                  type="datetime-local"
+                  value={newStart}
+                  onChange={(e) => setNewStart(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  required
+                  className="w-full py-2.5 pl-4 pr-10 rounded-xl bg-white dark:bg-black/40 border border-gray-200 dark:border-violet-500/30 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200 [color-scheme:inherit]"
+                />
+                <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none text-gray-500 dark:text-violet-200 shrink-0" aria-hidden />
+              </div>
+            </div>
+            <div className="min-w-[180px]">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-medium mb-1.5">Ends</label>
+              <div className="datetime-input-wrapper relative">
+                <input
+                  type="datetime-local"
+                  value={newEnd}
+                  onChange={(e) => setNewEnd(e.target.value)}
+                  min={newStart || new Date().toISOString().slice(0, 16)}
+                  required
+                  className="w-full py-2.5 pl-4 pr-10 rounded-xl bg-white dark:bg-black/40 border border-gray-200 dark:border-violet-500/30 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200 [color-scheme:inherit]"
+                />
+                <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none text-gray-500 dark:text-violet-200 shrink-0" aria-hidden />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="shrink-0 px-6 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 dark:bg-gradient-to-r dark:from-violet-600 dark:to-indigo-600 dark:hover:from-violet-500 dark:hover:to-indigo-500 text-white font-medium transition-all duration-200 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-100 dark:focus:ring-offset-[#16161d]"
+            >
+              Add event
+            </button>
           </div>
-          <div className="form-group mb-0">
-            <label className="block text-gray-800 dark:text-gray-300 text-sm font-medium mb-1">Start</label>
-            <input type="datetime-local" value={newStart} onChange={(e) => setNewStart(e.target.value)} required className="w-full py-2.5 px-4 rounded-xl bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-violet-500/30 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200" />
-          </div>
-          <div className="form-group mb-0">
-            <label className="block text-gray-800 dark:text-gray-300 text-sm font-medium mb-1">End</label>
-            <input type="datetime-local" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} required className="w-full py-2.5 px-4 rounded-xl bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-violet-500/30 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all duration-200" />
-          </div>
-          <button type="submit" className="px-5 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 dark:bg-gradient-to-r dark:from-violet-600 dark:to-indigo-600 dark:hover:from-violet-500 dark:hover:to-indigo-500 text-white font-medium transition-all duration-200 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-            Add event
-          </button>
         </form>
       </div>
 

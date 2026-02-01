@@ -66,19 +66,21 @@ const COMMAND_CHIPS = ['/help', '/plan', '/summarize', '/flashcards', '/quiz', '
 const MAX_CONVERSATIONS = 3;
 const CONVERSATIONS_STORAGE_KEY = (uid) => `ecstudy-copilot-conversations-${uid}`;
 
-/** Mock quiz data for /quiz mode (frontend-only; no backend change). */
-function getMockQuizData() {
-  return {
-    question: 'What is the main benefit of spaced repetition when studying?',
-    options: [
-      'It spreads learning over time to improve long-term retention',
-      'It reduces total study time by half',
-      'It only works for language learning',
-      'It requires a tutor to be effective',
-    ],
-    correctIndex: 0,
-    explanation: 'Spaced repetition improves long-term retention by reviewing material at increasing intervals, so your brain strengthens memories over time.',
-  };
+/** Normalize backend quiz question to QuizCard format: { question, options, correctIndex, explanation }. */
+function normalizeQuizQuestion(q) {
+  const question = String(q.q ?? q.question ?? '').trim() || 'Question';
+  const choices = Array.isArray(q.choices) ? q.choices : (q.options || []);
+  const options = choices.map((c) => (typeof c === 'string' ? c : (c?.text ?? c?.label ?? '')));
+  const answer = q.answer ?? q.correctIndex;
+  let correctIndex = 0;
+  if (typeof answer === 'number' && answer >= 0 && answer < options.length) {
+    correctIndex = answer;
+  } else if (typeof answer === 'string') {
+    const idx = options.findIndex((o) => String(o).trim().toLowerCase() === String(answer).trim().toLowerCase());
+    if (idx >= 0) correctIndex = idx;
+  }
+  const explanation = String(q.explanation ?? '').trim();
+  return { question, options: options.length ? options : ['Option A', 'Option B', 'Option C', 'Option D'], correctIndex, explanation };
 }
 
 export default function Home() {
@@ -110,7 +112,9 @@ export default function Home() {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [commandMenuActiveIndex, setCommandMenuActiveIndex] = useState(0);
   const [copilotView, setCopilotView] = useState('chat');
-  const [quizData, setQuizData] = useState(null);
+  const [quizQuestionsFromApi, setQuizQuestionsFromApi] = useState([]);
+  const [quizQuestionIndex, setQuizQuestionIndex] = useState(0);
+  const [quizTopic, setQuizTopic] = useState('');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -172,9 +176,12 @@ export default function Home() {
 
   const clearChat = () => {
     setMessages([]);
+    setInput('');
     setError('');
     setCopilotView('chat');
-    setQuizData(null);
+    setQuizQuestionsFromApi([]);
+    setQuizQuestionIndex(0);
+    setQuizTopic('');
     if (activeConversationId) {
       setConversations((prev) => prev.filter((c) => c.id !== activeConversationId));
       setActiveConversationId(null);
@@ -283,7 +290,9 @@ export default function Home() {
     const isQuizCommand = raw.trim().toLowerCase().startsWith('/quiz');
     if (isQuizCommand) {
       setCopilotView('quiz');
-      setQuizData(getMockQuizData());
+      setQuizQuestionsFromApi([]);
+      setQuizQuestionIndex(0);
+      setQuizTopic(raw.replace(/^\/quiz\s*/i, '').trim() || 'General study topic');
     } else {
       setCopilotView('chat');
     }
@@ -323,6 +332,13 @@ export default function Home() {
             if (last?.role === 'assistant') next[next.length - 1] = { ...last, structured };
             return next;
           });
+          if (structured?.questions?.length) {
+            const normalized = structured.questions.map(normalizeQuizQuestion);
+            setQuizQuestionsFromApi(normalized);
+            setQuizQuestionIndex(0);
+            if (structured.topic) setQuizTopic(structured.topic);
+            setCopilotView('quiz');
+          }
         } else if (event.type === 'citations' && Array.isArray(event.citations)) {
           citations = event.citations;
           setMessages((m) => {
@@ -494,6 +510,8 @@ export default function Home() {
     ...taskList.filter((t) => !t.completed && t.dueDate).slice(0, 3).map((t) => ({ type: 'task', title: t.title, due: t.dueDate })),
   ].sort((a, b) => (a.due || '').localeCompare(b.due || '')).slice(0, 5);
 
+  const currentQuiz = quizQuestionsFromApi[quizQuestionIndex] ?? { question: '', options: [], correctIndex: 0, explanation: '' };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_260px] gap-6 p-6 min-h-full bg-white dark:bg-[#0a0a0f] text-gray-900 dark:text-white transition-colors duration-200">
       <div className="space-y-4 order-2 lg:order-1">
@@ -631,16 +649,29 @@ export default function Home() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto min-h-[120px] space-y-4 mb-4">
-              {copilotView === 'quiz' && quizData ? (
-                <>
-                  <QuizCard
-                    question={quizData.question}
-                    options={quizData.options}
-                    correctIndex={quizData.correctIndex}
-                    explanation={quizData.explanation}
-                    onBack={() => setCopilotView('chat')}
-                  />
-                </>
+              {copilotView === 'quiz' && quizQuestionsFromApi.length > 0 ? (
+                <QuizCard
+                  key={quizQuestionIndex}
+                  question={currentQuiz.question}
+                  options={currentQuiz.options}
+                  correctIndex={currentQuiz.correctIndex}
+                  explanation={currentQuiz.explanation}
+                  currentIndex={quizQuestionIndex}
+                  totalCount={quizQuestionsFromApi.length}
+                  topic={quizTopic}
+                  onNext={() => setQuizQuestionIndex((i) => Math.min(i + 1, quizQuestionsFromApi.length - 1))}
+                  onGetMore={() => sendMessage('/quiz ' + (quizTopic || 'more questions'))}
+                  onEndChat={clearChat}
+                />
+              ) : copilotView === 'quiz' && loading ? (
+                <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+                  <span className="inline-flex gap-1 mr-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                  Loading quiz…
+                </div>
               ) : (
                 <>
               {messages.map((m, i) => (

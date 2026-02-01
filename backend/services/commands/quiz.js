@@ -74,13 +74,32 @@ export async function run({ userId, messages, context, args }) {
     }
   }
 
-  const copilot = await import('../copilotService/index.js');
-  const result = await copilot.generateQuiz({
-    userId: userId || 'anonymous',
-    topic: text,
-    difficulty,
-    numQuestions: NUM_QUESTIONS,
-  });
+  let result;
+  try {
+    const copilot = await import('../copilotService/index.js');
+    result = await copilot.generateQuiz({
+      userId: userId || 'anonymous',
+      topic: text,
+      difficulty,
+      numQuestions: NUM_QUESTIONS,
+    });
+  } catch (e) {
+    const isAzureUnavailable =
+      /DeploymentNotFound|404|API deployment|resource does not exist/i.test(e.message || '');
+    if (isAzureUnavailable) {
+      console.warn('[quiz] Azure OpenAI unavailable (e.g. DeploymentNotFound), using mock quiz:', e.message);
+      const mock = await import('../copilotService/copilot.mock.js');
+      result = await mock.generateQuiz({
+        userId: userId || 'anonymous',
+        topic: text,
+        difficulty,
+        numQuestions: NUM_QUESTIONS,
+      });
+    } else {
+      throw e;
+    }
+  }
+
   const quizId = 'quiz-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
   db.prepare(
     'INSERT INTO quizzes (id, userId, topic, difficulty, numQuestions, questions) VALUES (?, ?, ?, ?, ?, ?)'
