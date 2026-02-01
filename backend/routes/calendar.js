@@ -85,42 +85,56 @@ router.post("/sync", async (req, res) => {
     ensureUser(db, userId);
 
     const accessToken = getStoredAccessToken(userId);
-    const provider = accessToken ? "outlook" : "mock-outlook";
     const useGraph = process.env.USE_MS_GRAPH === "true";
+    const provider = accessToken ? "outlook" : "mock-outlook";
     console.log("[calendar/sync] userId=" + userId + " hasToken=" + !!accessToken + " USE_MS_GRAPH=" + useGraph + " -> source=" + (accessToken ? "outlook" : "mock"));
+
+    let normalized = [];
+
     if (useGraph && !accessToken) {
-      console.warn("[calendar/sync] No Microsoft token for userId=" + userId + ". Token is stored per user—reconnect from Settings (Connect Microsoft) while logged in as this account, or sign in with Microsoft from the login page.");
-    }
-
-    const graphEvents = await getCalendarEvents({
-      userId,
-      start,
-      end,
-      accessToken,
-    });
-
-    const normalized = (graphEvents || [])
-      .map(normalizeGraphEvent)
-      .filter((x) => x.graphId && x.startAt && x.endAt)
-      .map((x) => {
-        const sourceId = buildSourceId({ provider, graphId: x.graphId });
-        const id = buildStableLocalId({ provider, graphId: x.graphId });
-
-        return {
-          id,
-          userId: String(userId),
-          title: x.title,
-          startAt: x.startAt,
-          endAt: x.endAt,
-          type: "academic",
-          sourceId, // unique per event
-        };
+      console.warn("[calendar/sync] No Microsoft token for userId=" + userId + ". Skipping mock data—connect Microsoft in Settings to sync real Outlook events.");
+      // Remove any previously synced mock events so "Mock: Team standup" doesn't stick around
+      try {
+        const deleted = db.prepare(
+          "DELETE FROM events WHERE userId = ? AND (sourceId LIKE 'mock-outlook:%' OR id LIKE 'ms:mock-outlook:%')"
+        ).run(userId);
+        if (deleted.changes > 0) {
+          console.log("[calendar/sync] Removed " + deleted.changes + " mock event(s) for user (no token).");
+        }
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      const graphEvents = await getCalendarEvents({
+        userId,
+        start,
+        end,
+        accessToken,
       });
 
-    normalized.forEach((evt) => upsertLocalEventById(db, evt));
+      normalized = (graphEvents || [])
+        .map(normalizeGraphEvent)
+        .filter((x) => x.graphId && x.startAt && x.endAt)
+        .map((x) => {
+          const sourceId = buildSourceId({ provider, graphId: x.graphId });
+          const id = buildStableLocalId({ provider, graphId: x.graphId });
 
-    if (accessToken) {
-      console.log("[calendar/sync] Outlook sync complete: " + normalized.length + " events (range " + start + " to " + end + ")");
+          return {
+            id,
+            userId: String(userId),
+            title: x.title,
+            startAt: x.startAt,
+            endAt: x.endAt,
+            type: "academic",
+            sourceId,
+          };
+        });
+
+      normalized.forEach((evt) => upsertLocalEventById(db, evt));
+
+      if (accessToken) {
+        console.log("[calendar/sync] Outlook sync complete: " + normalized.length + " events (range " + start + " to " + end + ")");
+      }
     }
 
     res.json({
