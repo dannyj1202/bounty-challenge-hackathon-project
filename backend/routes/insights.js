@@ -66,6 +66,12 @@ router.get('/university', (req, res) => {
     w.pressureScore = (w.dueCount || 0) + (w.completedCount || 0) + (w.hard || 0) * 2 + (w.medium || 0) * 1.5 + (w.easy || 0);
   }
 
+  // Recent student reviews (Quiz / feedback) — teachers can see these in the dashboard
+  const recentReviews = db.prepare(`
+    SELECT id, userId, value as text, createdAt
+    FROM feedback WHERE type = 'review' ORDER BY createdAt DESC LIMIT 50
+  `).all();
+
   res.json({
     aggregated: true,
     anonymized: true,
@@ -75,6 +81,7 @@ router.get('/university', (req, res) => {
     mostCommonWeakTopics: weakTopics,
     workloadPressureWeeks: workload,
     workloadHeatmap: heatmapWeeks,
+    recentReviews,
   });
 });
 

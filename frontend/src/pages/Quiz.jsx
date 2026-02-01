@@ -1,380 +1,120 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { quiz as quizApi } from '../api/client';
-
-// Use relative /api so Vite proxy works; set VITE_API_BASE only if backend is on another origin.
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+import { reviews as reviewsApi } from '../api/client';
 
 export default function Quiz() {
   const { userId } = useAuth();
-
-  // mode: "batch" (existing) or "adaptive"
-  const [mode, setMode] = useState('batch');
-
-  // Shared inputs
-  const [topic, setTopic] = useState('Algebra');
-
-  // Batch mode state
-  const [difficulty, setDifficulty] = useState('medium');
-  const [numQuestions, setNumQuestions] = useState(5);
-  const [quiz, setQuiz] = useState(null);
-  const [answers, setAnswers] = useState([]);
-  const [submitted, setSubmitted] = useState(null);
-
-  // Adaptive mode state
-  const [sessionId, setSessionId] = useState('');
-  const [aQuestion, setAQuestion] = useState('');
-  const [aOptions, setAOptions] = useState([]);
-  const [aSelected, setASelected] = useState(null);
-  const [aDifficulty, setADifficulty] = useState(3);
-  const [aSubtopic, setASubtopic] = useState('');
-  const [aFeedback, setAFeedback] = useState('');
-  const [weakTopics, setWeakTopics] = useState([]);
-
-  // Common status
+  const [reviewText, setReviewText] = useState('');
+  const [reviewList, setReviewList] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  // Reset UI when switching modes
-  useEffect(() => {
-    setError('');
-    setLoading(false);
+  const loadReviews = () => {
+    if (!userId) return;
+    reviewsApi.list(userId).then(setReviewList).catch(() => setReviewList([]));
+  };
 
-    // reset batch
-    setQuiz(null);
-    setAnswers([]);
-    setSubmitted(null);
+  useEffect(loadReviews, [userId]);
 
-    // reset adaptive
-    setSessionId('');
-    setAQuestion('');
-    setAOptions([]);
-    setASelected(null);
-    setADifficulty(3);
-    setASubtopic('');
-    setAFeedback('');
-    setWeakTopics([]);
-  }, [mode]);
-
-  /* ===========================
-     BATCH MODE (existing)
-     =========================== */
-
-  const generateQuiz = async () => {
+  const submitReview = async (e) => {
+    e.preventDefault();
+    const text = reviewText.trim();
+    if (!text || !userId) return;
     setLoading(true);
     setError('');
-    setQuiz(null);
-    setAnswers([]);
-    setSubmitted(null);
+    setSaved(false);
     try {
-      const res = await quizApi.generate({ userId, topic, difficulty, numQuestions });
-      setQuiz(res);
-      setAnswers(new Array((res.questions || []).length).fill(null));
+      await reviewsApi.create(userId, text);
+      setReviewText('');
+      setSaved(true);
+      loadReviews();
     } catch (err) {
-      setError(err.message || 'Failed to generate quiz');
+      setError(err.message || 'Could not save review');
     } finally {
       setLoading(false);
     }
   };
-
-  const submitQuiz = async () => {
-    if (!quiz?.quizId || answers.some((a) => a === null)) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await quizApi.submit({ userId, quizId: quiz.quizId, answers });
-      setSubmitted(res);
-    } catch (err) {
-      setError(err.message || 'Failed to submit quiz');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setAnswer = (qIndex, optionIndex) => {
-    setAnswers((prev) => {
-      const next = [...prev];
-      next[qIndex] = optionIndex;
-      return next;
-    });
-  };
-
-  const acceptSuggestion = (s) => {
-    window.alert(`Suggestion accepted: ${s.action}. (In a full app this would add to your tasks.)`);
-  };
-
-  /* ===========================
-     ADAPTIVE MODE (new)
-     =========================== */
-
-  const startAdaptive = async () => {
-    if (!topic) return;
-    setLoading(true);
-    setError('');
-    setAFeedback('');
-    setWeakTopics([]);
-    setASelected(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/quiz/adaptive/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userId || 'anonymous', topic })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to start adaptive quiz');
-
-      setSessionId(data.sessionId);
-      setADifficulty(data.difficulty || 3);
-      setASubtopic(data.subtopic || topic);
-      setAQuestion(data.question || '');
-      setAOptions(data.options || []);
-    } catch (err) {
-      setError(err.message || 'Failed to start adaptive quiz');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const submitAdaptiveAnswer = async () => {
-    if (!sessionId || aSelected === null) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const res = await fetch(`${API_BASE}/api/quiz/adaptive/answer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userId || 'anonymous',
-          sessionId,
-          selectedIndex: aSelected
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to submit answer');
-
-      setAFeedback(
-        data.correct
-          ? `✅ Correct — next question will be harder (Difficulty ${data.newDifficulty}/5)`
-          : `❌ Wrong — next question will be easier (Difficulty ${data.newDifficulty}/5)`
-      );
-
-      setADifficulty(data.newDifficulty || aDifficulty);
-      setASubtopic(data.nextSubtopic || topic);
-      setAQuestion(data.nextQuestion || '');
-      setAOptions(data.nextOptions || []);
-      setASelected(null);
-
-      setWeakTopics(data.weakTopics || []);
-    } catch (err) {
-      setError(err.message || 'Failed to submit answer');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const questions = quiz?.questions || [];
 
   return (
-    <div>
-      <h2>Quiz</h2>
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {/* Main content */}
+      <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+        <h2>Quiz</h2>
 
-      {/* Mode toggle */}
-      <div className="card">
-        <h3>Mode</h3>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className={`btn ${mode === 'batch' ? '' : 'btn-secondary'}`}
-            onClick={() => setMode('batch')}
-            disabled={loading}
-          >
-            Normal Quiz (5 questions)
-          </button>
-          <button
-            type="button"
-            className={`btn ${mode === 'adaptive' ? '' : 'btn-secondary'}`}
-            onClick={() => setMode('adaptive')}
-            disabled={loading}
-          >
-            Adaptive Quiz (harder/easier)
-          </button>
+        <div className="card" style={{ maxWidth: 560, marginTop: 24 }}>
+          <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                margin: '0 auto 20px',
+                borderRadius: 12,
+                background: 'var(--bg)',
+                border: '2px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 28,
+              }}
+              aria-hidden
+            >
+              📝
+            </div>
+            <h3 style={{ margin: '0 0 12px', fontSize: 1.25 + 'rem' }}>Quiz mode — coming soon</h3>
+            <p style={{ color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+              We’re still building Quiz mode. You’ll be able to take normal and adaptive quizzes by topic, get scores, and see weak areas—all aligned with your study goals.
+            </p>
+            <p style={{ color: 'var(--text-muted)', marginTop: 16, lineHeight: 1.5 }}>
+              We’ll use insights from your quiz performance to understand your weak areas. You’ll also be able to leave a short review of where you feel disturbed or slow. That feedback goes straight to your teacher or admin, who can see it neatly in the analytics dashboard to support you better.
+            </p>
+            <p style={{ color: 'var(--text-muted)', marginTop: 16, fontSize: 14 }}>
+              This feature will be deployed soon. In the meantime, use Home for Copilot, Calendar for study blocks, and Notes for summaries and flashcards.
+            </p>
+          </div>
         </div>
-        <p style={{ color: 'var(--text-muted)', marginTop: 10 }}>
-          Adaptive mode asks 1 question at a time. Correct → harder. Wrong → easier. Weak topics get prioritized.
+      </div>
+
+      {/* Side: Review box */}
+      <div className="card" style={{ width: 320, flexShrink: 0 }}>
+        <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Leave a review</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+          Share where you feel stuck, slow, or disturbed. Your teacher can see this in the analytics dashboard.
         </p>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-
-      {/* Shared Topic input */}
-      <div className="card">
-        <h3>Topic</h3>
-        <div className="form-group" style={{ marginBottom: 0, maxWidth: 360 }}>
-          <label>Topic</label>
-          <input
-            type="text"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g. Algebra"
+        <form onSubmit={submitReview}>
+          <textarea
+            value={reviewText}
+            onChange={(e) => setReviewText(e.target.value)}
+            placeholder="e.g. I struggle with algebra under time pressure…"
+            rows={3}
+            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', resize: 'vertical', font: 'inherit' }}
+            maxLength={500}
           />
-        </div>
-      </div>
-
-      {/* ===========================
-          BATCH MODE UI
-      =========================== */}
-      {mode === 'batch' && (
-        <>
-          <div className="card">
-            <h3>Generate quiz</h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>Difficulty</label>
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>Questions</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={numQuestions}
-                  onChange={(e) => setNumQuestions(Number(e.target.value))}
-                />
-              </div>
-              <button type="button" className="btn" onClick={generateQuiz} disabled={loading}>
-                {loading ? 'Generating…' : 'Generate quiz'}
-              </button>
-            </div>
-          </div>
-
-          {questions.length > 0 && !submitted && (
-            <div className="card">
-              <h3>Questions</h3>
-              {questions.map((q, i) => (
-                <div key={q.id || i} style={{ marginBottom: 20 }}>
-                  <p><strong>{i + 1}. {q.question}</strong></p>
-                  <div>
-                    {(q.options || []).map((opt, j) => (
-                      <button
-                        key={j}
-                        type="button"
-                        className={`quiz-option ${answers[i] === j ? 'selected' : ''}`}
-                        onClick={() => setAnswer(i, j)}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button type="button" className="btn" onClick={submitQuiz} disabled={loading || answers.some((a) => a === null)}>
-                Submit
-              </button>
-            </div>
-          )}
-
-          {submitted && (
-            <div className="card">
-              <h3>Results</h3>
-              <p><strong>Score: {submitted.score}%</strong></p>
-              {submitted.explanation && <p>{submitted.explanation}</p>}
-              {submitted.weakTopics?.length > 0 && (
-                <p>Weak topics: {submitted.weakTopics.join(', ')}</p>
-              )}
-              {submitted.suggestions?.length > 0 && (
-                <div>
-                  <p><strong>Suggested priorities (accept / edit / ignore)</strong></p>
-                  <ul className="widget-list">
-                    {submitted.suggestions.map((s, i) => (
-                      <li key={i}>
-                        {s.priority}. {s.action}
-                        <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => acceptSuggestion(s)}>
-                          Accept
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ===========================
-          ADAPTIVE MODE UI
-      =========================== */}
-      {mode === 'adaptive' && (
-        <>
-          <div className="card">
-            <h3>Adaptive session</h3>
-            <button type="button" className="btn" onClick={startAdaptive} disabled={loading || !topic}>
-              {loading ? 'Starting…' : 'Start Adaptive Quiz'}
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="submit" className="btn" disabled={loading || !reviewText.trim()}>
+              {loading ? 'Saving…' : 'Save review'}
             </button>
-
-            {sessionId && (
-              <div style={{ marginTop: 12, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <div><strong>Difficulty:</strong> {aDifficulty}/5</div>
-                <div><strong>Focus:</strong> {aSubtopic}</div>
-                <div><strong>Session:</strong> {sessionId}</div>
-              </div>
-            )}
+            {saved && <span style={{ fontSize: 13, color: 'var(--success)' }}>Saved</span>}
           </div>
+        </form>
+        {error && <p className="error" style={{ marginTop: 8, fontSize: 13 }}>{error}</p>}
 
-          {sessionId && (
-            <div className="card">
-              <h3>Question</h3>
-              <p><strong>{aQuestion}</strong></p>
-
-              <ul className="widget-list">
-                {aOptions.map((opt, idx) => (
-                  <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <input
-                      type="radio"
-                      name="adaptiveOpt"
-                      checked={aSelected === idx}
-                      onChange={() => setASelected(idx)}
-                    />
-                    <span>{opt}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                type="button"
-                className="btn"
-                onClick={submitAdaptiveAnswer}
-                disabled={loading || aSelected === null}
-              >
-                {loading ? 'Submitting…' : 'Submit Answer'}
-              </button>
-
-              {aFeedback && <p style={{ marginTop: 12 }}>{aFeedback}</p>}
-
-              {weakTopics.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <strong>Weak Topics (most missed):</strong>
-                  <ul>
-                    {weakTopics.map((t, i) => (
-                      <li key={i}>{t.topic} — weakCount {t.weakCount}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
+        <h4 style={{ marginTop: 20, marginBottom: 8, fontSize: 14, color: 'var(--text-muted)' }}>Review box</h4>
+        {reviewList.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No reviews yet. Your saved reviews will appear here.</p>
+        ) : (
+          <ul className="widget-list" style={{ maxHeight: 240, overflowY: 'auto' }}>
+            {reviewList.map((r) => (
+              <li key={r.id} style={{ fontSize: 13, padding: '8px 0' }}>
+                <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.text}</span>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

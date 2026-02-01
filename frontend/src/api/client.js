@@ -61,6 +61,10 @@ export const tasks = {
   delete: (id) => api('DELETE', `/tasks/${id}`),
   complete: (id) => api('PATCH', `/tasks/${id}/complete`),
 };
+export const reviews = {
+  list: (userId) => api('GET', `/reviews?userId=${encodeURIComponent(userId)}`),
+  create: (userId, text) => api('POST', '/reviews', { userId, text }),
+};
 export const events = {
   list: (userId, start, end) => {
     let path = `/events?userId=${encodeURIComponent(userId)}`;

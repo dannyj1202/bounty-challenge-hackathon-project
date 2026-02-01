@@ -43,6 +43,14 @@ export default function Insights() {
         String(w.hard ?? 0),
         String(w.pressureScore ?? 0),
       ]),
+      [],
+      ['Recent reviews', 'Date', 'User ID', 'Text'],
+      ...(university.recentReviews || []).map((r) => [
+        '',
+        r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '',
+        r.userId || '',
+        (r.text || '').replace(/\n/g, ' '),
+      ]),
     ];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -192,6 +200,28 @@ export default function Insights() {
               );
             })}
           </div>
+        )}
+      </div>
+
+      {/* Recent student reviews */}
+      <div className="card">
+        <h3>Recent student reviews</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 16 }}>
+          Reviews left by students (Quiz page). Use this to see where they feel disturbed or slow.
+        </p>
+        {(university?.recentReviews || []).length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No reviews yet.</p>
+        ) : (
+          <ul className="widget-list">
+            {(university.recentReviews || []).map((r) => (
+              <li key={r.id} style={{ padding: '12px 0' }}>
+                <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.text}</span>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {r.userId} · {r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

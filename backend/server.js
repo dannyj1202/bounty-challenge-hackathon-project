@@ -24,6 +24,7 @@ import docsRoutes from './routes/docs.js';
 import documentsRoutes from './routes/documents.js';
 import tasksRoutes from './routes/tasks.js';
 import onenoteRoutes from "./routes/onenote.js";
+import reviewsRoutes from "./routes/reviews.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -70,6 +71,7 @@ app.use('/api/docs', docsRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use("/api/onenote", onenoteRoutes);
+app.use("/api/reviews", reviewsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
